@@ -37,6 +37,22 @@ describe("processCommand", () => {
         })
     })
 
+    describe("showCommands action", () => {
+        it("returns showCommands with all command descriptions when input is ?", () => {
+            const result = processCommand("?")
+            expect(result.action).toBe("showCommands")
+            expect(result.message).toContain("M - Show the map")
+            expect(result.message).toContain("Q - Quit the game")
+            expect(result.message).toContain("? - Show all commands")
+        })
+
+        it("returns showCommands when input has surrounding whitespace", () => {
+            const result = processCommand(" ? ")
+            expect(result.action).toBe("showCommands")
+            expect(result.message).toContain("M - Show the map")
+        })
+    })
+
     describe("showMap action", () => {
         it("returns showMap when input is M", () => {
             const engine = new MissionEngineTestHarness()

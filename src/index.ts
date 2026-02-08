@@ -7,7 +7,7 @@ const engine = new MissionEngineTestHarness()
 console.log("Battle of Fell Desert CLI")
 console.log("=========================")
 console.log("Game engine initialized.")
-console.log("Enter 'Q' to quit.\n")
+console.log("Enter 'Q' to quit, '?' for commands.\n")
 
 const prompt = (rl: readline.Interface): void => {
     rl.question("> ", (answer) => {
