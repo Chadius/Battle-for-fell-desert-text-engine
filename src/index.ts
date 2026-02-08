@@ -11,7 +11,7 @@ console.log("Enter 'Q' to quit.\n")
 
 const prompt = (rl: readline.Interface): void => {
     rl.question("> ", (answer) => {
-        const result = processCommand(answer)
+        const result = processCommand(answer, engine)
         console.log(result.message)
 
         if (result.action === "quit") {

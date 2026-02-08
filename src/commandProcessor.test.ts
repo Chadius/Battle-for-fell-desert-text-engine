@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { processCommand } from "./commandProcessor.js"
+import { MissionEngineTestHarness } from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
 
 describe("processCommand", () => {
     describe("quit action", () => {
@@ -33,6 +34,45 @@ describe("processCommand", () => {
             const result = processCommand("")
             expect(result.action).toBe("echo")
             expect(result.message).toBe("You entered: ")
+        })
+    })
+
+    describe("showMap action", () => {
+        it("returns showMap when input is M", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("M", engine)
+            expect(result.action).toBe("showMap")
+            expect(result.message).toContain("Map:")
+        })
+
+        it("returns showMap when input is lowercase m", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("m", engine)
+            expect(result.action).toBe("showMap")
+            expect(result.message).toContain("Map:")
+        })
+
+        it("returns showMap when input has surrounding whitespace", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("  M  ", engine)
+            expect(result.action).toBe("showMap")
+            expect(result.message).toContain("Map:")
+        })
+
+        it("returns an error message when engine is undefined", () => {
+            const result = processCommand("M")
+            expect(result.action).toBe("showMap")
+            expect(result.message).toBe(
+                "No engine available to display the map."
+            )
+        })
+
+        it("renders the test harness map with squaddies", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("M", engine)
+            expect(result.message).toContain("5 columns x 4 rows")
+            expect(result.message).toContain("lini")
+            expect(result.message).toContain("slither-demon")
         })
     })
 })
