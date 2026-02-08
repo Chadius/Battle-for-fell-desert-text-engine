@@ -1,0 +1,10 @@
+*.log
+/node_modules/
+.idea/
+package-lock.json
+dist/
+*.js
+.DS_Store
+/build/
+/public/
+*.js.map
