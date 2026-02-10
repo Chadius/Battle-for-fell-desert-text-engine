@@ -42,6 +42,7 @@ describe("processCommand", () => {
             const result = processCommand("?")
             expect(result.action).toBe("showCommands")
             expect(result.message).toContain("M - Show the map")
+            expect(result.message).toContain("row, col - Inspect a coordinate")
             expect(result.message).toContain("Q - Quit the game")
             expect(result.message).toContain("? - Show all commands")
         })
@@ -50,6 +51,36 @@ describe("processCommand", () => {
             const result = processCommand(" ? ")
             expect(result.action).toBe("showCommands")
             expect(result.message).toContain("M - Show the map")
+        })
+    })
+
+    describe("inspectCoordinate action", () => {
+        it("returns terrain info for a valid coordinate", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("0, 1", engine)
+            expect(result.action).toBe("inspectCoordinate")
+            expect(result.message).toContain("(0,1): Standard")
+        })
+
+        it("returns off-map message for an out-of-bounds coordinate", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("10, 10", engine)
+            expect(result.action).toBe("inspectCoordinate")
+            expect(result.message).toContain("is off map")
+        })
+
+        it("returns an error message when engine is undefined", () => {
+            const result = processCommand("0, 0")
+            expect(result.action).toBe("inspectCoordinate")
+            expect(result.message).toBe(
+                "No engine available to inspect coordinates."
+            )
+        })
+
+        it("falls through to echo for non-coordinate input", () => {
+            const result = processCommand("hello world")
+            expect(result.action).toBe("echo")
+            expect(result.message).toBe("You entered: hello world")
         })
     })
 
