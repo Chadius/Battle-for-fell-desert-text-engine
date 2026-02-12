@@ -1,19 +1,18 @@
 import type { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
 import type { OffsetCoordinate } from "../logic/src/coordinateMap/offsetCoordinate.js"
 
-// Parses user input into a coordinate, supporting formats like "2, 0", "3 5", "(6, 10)", "(1 2)"
 export const parseCoordinate = (
     input: string
 ): OffsetCoordinate | undefined => {
     const trimmed = input.trim()
-    const match = trimmed.match(/^\(?(\d+)[,\s]+(\d+)\)?$/)
+    // Parses user input into a coordinate, supporting formats like "2, 0", "3 5", "(6, 10)", "(1 2)"
+    const match = new RegExp(/^\(?(\d+)[,\s]+(\d+)\)?$/).exec(trimmed)
     if (match == undefined) {
         return undefined
     }
-    return { row: parseInt(match[1], 10), col: parseInt(match[2], 10) }
+    return { row: Number.parseInt(match[1], 10), col: Number.parseInt(match[2], 10) }
 }
 
-// Converts terrain movement properties into a human-readable name
 export const terrainName = (
     movementCost: number | undefined,
     canStop: boolean
@@ -24,7 +23,6 @@ export const terrainName = (
     return "Difficult"
 }
 
-// Inspects a coordinate on the map, returning terrain and optional squaddie info
 export const inspectCoordinate = (
     engine: MissionEngine,
     coordinate: OffsetCoordinate
@@ -48,10 +46,11 @@ export const inspectCoordinate = (
     const squaddieId = engine.getSquaddieAtCoordinate(coordinate)
     if (squaddieId != undefined) {
         const info = engine.getSquaddieInfo(squaddieId)
-        lines.push(info.name)
-        lines.push(`  Hit Points: ${info.currentHitPoints}/${info.maxHitPoints}`)
         lines.push(
-            `  Action Points: ${info.currentActionPoints}/${info.maximumActionPoints}`
+            info.name,
+            `  Affiliation: ${info.affiliation}`,
+            `  Hit Points: ${info.currentHitPoints}/${info.maxHitPoints}`,
+            `  Action Points: ${info.currentActionPoints}/${info.maximumActionPoints}`,
         )
     }
 

@@ -1,6 +1,5 @@
 import type { MapOverview } from "../logic/src/mission/missionEngine/missionEngine.js"
 
-// Converts terrain properties into a display symbol
 export const terrainToSymbol = (
     movementCost: number | undefined,
     canStop: boolean
@@ -11,13 +10,11 @@ export const terrainToSymbol = (
     return "#"
 }
 
-// Assigns a unique single-character label to each squaddie on the map
 export const buildSquaddieLabels = (
     overview: MapOverview
 ): Map<string, string> => {
     const squaddieIds: string[] = []
 
-    // Collect all squaddie outOfBattleSquaddieIds in row-major order
     for (const row of overview.tiles) {
         for (const tile of row) {
             if (tile.squaddieId != undefined) {
@@ -28,7 +25,6 @@ export const buildSquaddieLabels = (
 
     const labels = new Map<string, string>()
 
-    // Group squaddies by their first character
     const firstCharGroups = new Map<string, string[]>()
     for (const id of squaddieIds) {
         const firstChar = id[0].toUpperCase()
@@ -38,7 +34,6 @@ export const buildSquaddieLabels = (
         firstCharGroups.get(firstChar)!.push(id)
     }
 
-    // Assign labels: unique first char or disambiguate with subsequent chars
     for (const [firstChar, ids] of firstCharGroups) {
         if (ids.length === 1) {
             labels.set(ids[0], firstChar)
@@ -50,12 +45,10 @@ export const buildSquaddieLabels = (
     return labels
 }
 
-// Uses subsequent characters to create unique labels when first characters collide
 const assignDisambiguatedLabels = (
     ids: string[],
     labels: Map<string, string>
 ): void => {
-    // Try increasing character positions until we find unique labels
     for (let charIndex = 1; charIndex < 20; charIndex++) {
         const candidateLabels = ids.map((id) => {
             const char = id[charIndex] ?? id[0]
@@ -72,13 +65,11 @@ const assignDisambiguatedLabels = (
         }
     }
 
-    // Fallback: use first char + index
     for (let i = 0; i < ids.length; i++) {
         labels.set(ids[i], ids[i][0].toUpperCase() + i)
     }
 }
 
-// Builds the grid lines with hex offset indentation
 const renderGridLines = (
     overview: MapOverview,
     squaddieLabels: Map<string, string>
@@ -101,7 +92,6 @@ const renderGridLines = (
     return lines
 }
 
-// Builds the terrain legend
 const renderLegend = (): string[] => {
     return [
         "",
@@ -113,7 +103,6 @@ const renderLegend = (): string[] => {
     ]
 }
 
-// Builds the squaddie listing with positions
 const renderSquaddieList = (
     overview: MapOverview,
     squaddieLabels: Map<string, string>
@@ -135,7 +124,6 @@ const renderSquaddieList = (
     return lines
 }
 
-// Renders the full map as a text string
 export const renderMap = (overview: MapOverview): string => {
     const squaddieLabels = buildSquaddieLabels(overview)
 

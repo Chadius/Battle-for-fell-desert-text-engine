@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { processCommand } from "./commandProcessor.js"
+import type { CommandContext } from "./commandProcessor.js"
 import { MissionEngineTestHarness } from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
 
 describe("processCommand", () => {
@@ -52,6 +53,20 @@ describe("processCommand", () => {
             expect(result.action).toBe("showCommands")
             expect(result.message).toContain("M - Show the map")
         })
+
+        it("shows L command when a squaddie is selected", () => {
+            const engine = new MissionEngineTestHarness()
+            const context: CommandContext = {
+                selectedSquaddieId: engine.getLiniSquaddieId(),
+            }
+            const result = processCommand("?", engine, context)
+            expect(result.message).toContain("L - Look at selected squaddie")
+        })
+
+        it("does not show L command when no squaddie is selected", () => {
+            const result = processCommand("?")
+            expect(result.message).not.toContain("L - Look at selected squaddie")
+        })
     })
 
     describe("inspectCoordinate action", () => {
@@ -81,6 +96,113 @@ describe("processCommand", () => {
             const result = processCommand("hello world")
             expect(result.action).toBe("echo")
             expect(result.message).toBe("You entered: hello world")
+        })
+
+        it("sets updatedContext with squaddieId when a squaddie is at the coordinate", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("0, 0", engine)
+            expect(result.updatedContext).toBeDefined()
+            expect(result.updatedContext!.selectedSquaddieId).toEqual(
+                engine.getLiniSquaddieId()
+            )
+        })
+
+        it("clears updatedContext when no squaddie is at the coordinate", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("2, 2", engine)
+            expect(result.updatedContext).toBeDefined()
+            expect(result.updatedContext!.selectedSquaddieId).toBeUndefined()
+        })
+
+        it("clears updatedContext for off-map coordinates", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("10, 10", engine)
+            expect(result.updatedContext).toBeDefined()
+            expect(result.updatedContext!.selectedSquaddieId).toBeUndefined()
+        })
+    })
+
+    describe("lookAtSquaddie action", () => {
+        it("returns squaddie details when a squaddie is selected", () => {
+            const engine = new MissionEngineTestHarness()
+            const context: CommandContext = {
+                selectedSquaddieId: engine.getLiniSquaddieId(),
+            }
+            const result = processCommand("L", engine, context)
+            expect(result.action).toBe("lookAtSquaddie")
+            expect(result.message).toContain("Lini")
+        })
+
+        it("returns error when no squaddie is selected", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("L", engine)
+            expect(result.action).toBe("lookAtSquaddie")
+            expect(result.message).toBe(
+                "No squaddie selected. Inspect a coordinate with a squaddie first."
+            )
+        })
+
+        it("returns error when engine is undefined", () => {
+            const context: CommandContext = {
+                selectedSquaddieId: {
+                    inBattleSquaddieId: 0,
+                    outOfBattleSquaddieId: "test",
+                },
+            }
+            const result = processCommand("L", undefined, context)
+            expect(result.action).toBe("lookAtSquaddie")
+            expect(result.message).toBe(
+                "No engine available to look at squaddie details."
+            )
+        })
+
+        it("is case-insensitive", () => {
+            const engine = new MissionEngineTestHarness()
+            const context: CommandContext = {
+                selectedSquaddieId: engine.getLiniSquaddieId(),
+            }
+            const result = processCommand("l", engine, context)
+            expect(result.action).toBe("lookAtSquaddie")
+            expect(result.message).toContain("Lini")
+        })
+
+        it("handles surrounding whitespace", () => {
+            const engine = new MissionEngineTestHarness()
+            const context: CommandContext = {
+                selectedSquaddieId: engine.getLiniSquaddieId(),
+            }
+            const result = processCommand("  L  ", engine, context)
+            expect(result.action).toBe("lookAtSquaddie")
+            expect(result.message).toContain("Lini")
+        })
+
+        it("shows squaddie name and affiliation", () => {
+            const engine = new MissionEngineTestHarness()
+            const context: CommandContext = {
+                selectedSquaddieId: engine.getLiniSquaddieId(),
+            }
+            const result = processCommand("L", engine, context)
+            expect(result.message).toContain("Lini")
+            expect(result.message).toContain("PLAYER")
+        })
+
+        it("shows hit points and action points", () => {
+            const engine = new MissionEngineTestHarness()
+            const context: CommandContext = {
+                selectedSquaddieId: engine.getLiniSquaddieId(),
+            }
+            const result = processCommand("L", engine, context)
+            expect(result.message).toContain("Hit Points:")
+            expect(result.message).toContain("Action Points:")
+        })
+
+        it("does not show conditions section when squaddie has no conditions", () => {
+            const engine = new MissionEngineTestHarness()
+            const context: CommandContext = {
+                selectedSquaddieId: engine.getLiniSquaddieId(),
+            }
+            const result = processCommand("L", engine, context)
+            expect(result.message).not.toContain("Conditions:")
         })
     })
 

@@ -88,7 +88,6 @@ describe("mapRenderer", () => {
             }
 
             const labels = buildSquaddieLabels(overview)
-            // Both start with L, so they should use subsequent characters
             const liniLabel = labels.get("lini")!
             const largoLabel = labels.get("largo")!
             expect(liniLabel).not.toBe(largoLabel)
@@ -245,7 +244,6 @@ describe("mapRenderer", () => {
 
             const output = renderMap(overview)
             const lines = output.split("\n")
-            // Find the grid lines (after the header)
             const gridLines = lines.filter(
                 (line) =>
                     (line.startsWith(".") ||
@@ -253,10 +251,10 @@ describe("mapRenderer", () => {
                         line.startsWith(" ")) &&
                     !line.startsWith("  ")
             )
-            // Even row (row 0) starts without indent
-            expect(gridLines[0]).toBe(". .")
-            // Odd row (row 1) starts with 1 space indent
-            expect(gridLines[1]).toBe(" ~ ~")
+            let evenRowStartsWithoutIndent = gridLines[0];
+            expect(evenRowStartsWithoutIndent).toBe(". .")
+            let oddRowStartsWithIndent = gridLines[1];
+            expect(oddRowStartsWithIndent).toBe(" ~ ~")
         })
 
         it("includes a legend section", () => {
@@ -321,12 +319,6 @@ describe("mapRenderer", () => {
         })
 
         it("renders the test harness map correctly", () => {
-            // Replicating the test harness map:
-            // "1 1 2 1 1"
-            // " 1 - 1 X 1"
-            // "1 1 1 1 2"
-            // " 2 1 - 1 1"
-            // Lini at (0,0), Slither-demon at (3,4)
             const overview: MapOverview = {
                 width: 5,
                 height: 4,

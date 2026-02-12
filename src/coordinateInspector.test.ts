@@ -62,35 +62,30 @@ describe("coordinateInspector", () => {
 
         it("returns Standard terrain for a standard tile", () => {
             const engine = new MissionEngineTestHarness()
-            // row 0, col 1 is standard terrain (movementCost=1, canStop=true)
             const result = inspectCoordinate(engine, { row: 0, col: 1 })
             expect(result).toBe("(0,1): Standard")
         })
 
         it("returns Difficult terrain for a difficult tile", () => {
             const engine = new MissionEngineTestHarness()
-            // row 0, col 2 is difficult terrain (movementCost=2, canStop=true)
             const result = inspectCoordinate(engine, { row: 0, col: 2 })
             expect(result).toBe("(0,2): Difficult")
         })
 
         it("returns Pit terrain for a pit tile", () => {
             const engine = new MissionEngineTestHarness()
-            // row 1, col 1 is a pit (movementCost=1, canStop=false)
             const result = inspectCoordinate(engine, { row: 1, col: 1 })
             expect(result).toBe("(1,1): Pit")
         })
 
         it("returns Wall terrain for a wall tile", () => {
             const engine = new MissionEngineTestHarness()
-            // row 1, col 3 is a wall (movementCost=undefined, canStop=false)
             const result = inspectCoordinate(engine, { row: 1, col: 3 })
             expect(result).toBe("(1,3): Wall")
         })
 
         it("shows terrain and squaddie info when a squaddie is present", () => {
             const engine = new MissionEngineTestHarness()
-            // lini is at row 0, col 0 on standard terrain
             const result = inspectCoordinate(engine, { row: 0, col: 0 })
             expect(result).toContain("(0,0): Standard")
             expect(result).toContain("Lini")
@@ -100,7 +95,6 @@ describe("coordinateInspector", () => {
 
         it("shows only terrain info when no squaddie is present", () => {
             const engine = new MissionEngineTestHarness()
-            // row 2, col 2 is standard terrain with no squaddie
             const result = inspectCoordinate(engine, { row: 2, col: 2 })
             expect(result).toBe("(2,2): Standard")
             expect(result).not.toContain("Hit Points:")

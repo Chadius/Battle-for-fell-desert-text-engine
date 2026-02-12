@@ -1,6 +1,7 @@
 import * as readline from "node:readline"
 import { MissionEngineTestHarness } from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
 import { processCommand } from "./commandProcessor.js"
+import type { CommandContext } from "./commandProcessor.js"
 
 const engine = new MissionEngineTestHarness()
 
@@ -9,10 +10,16 @@ console.log("=========================")
 console.log("Game engine initialized.")
 console.log("Enter 'Q' to quit, '?' for commands.\n")
 
+let currentContext: CommandContext = { selectedSquaddieId: undefined }
+
 const prompt = (rl: readline.Interface): void => {
     rl.question("> ", (answer) => {
-        const result = processCommand(answer, engine)
+        const result = processCommand(answer, engine, currentContext)
         console.log(result.message)
+
+        if (result.updatedContext != undefined) {
+            currentContext = result.updatedContext
+        }
 
         if (result.action === "quit") {
             rl.close()
