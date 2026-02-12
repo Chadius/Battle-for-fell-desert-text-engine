@@ -1,4 +1,26 @@
 import type { MapOverview } from "../logic/src/mission/missionEngine/missionEngine.js"
+import {
+    SquaddieAffiliation,
+    type TSquaddieAffiliation,
+} from "../logic/src/affiliation/affiliation.js"
+
+export interface MapRenderInfo {
+    turnNumber: number
+    currentAffiliation: TSquaddieAffiliation | undefined
+    squaddieAffiliations: Map<string, TSquaddieAffiliation>
+}
+
+export const affiliationDisplayName = (
+    affiliation: TSquaddieAffiliation
+): string => {
+    const displayNames: Record<TSquaddieAffiliation, string> = {
+        [SquaddieAffiliation.PLAYER]: "Player",
+        [SquaddieAffiliation.ALLY]: "Ally",
+        [SquaddieAffiliation.ENEMY]: "Enemy",
+        [SquaddieAffiliation.NONE]: "None",
+    }
+    return displayNames[affiliation]
+}
 
 export const terrainToSymbol = (
     movementCost: number | undefined,
@@ -103,34 +125,109 @@ const renderLegend = (): string[] => {
     ]
 }
 
-const renderSquaddieList = (
+const collectSquaddieEntries = (
     overview: MapOverview,
     squaddieLabels: Map<string, string>
-): string[] => {
-    if (squaddieLabels.size === 0) return []
-
-    const lines: string[] = ["Squaddies:"]
-
+): { id: string; label: string; row: number; col: number }[] => {
+    const entries: { id: string; label: string; row: number; col: number }[] =
+        []
     for (const row of overview.tiles) {
         for (const tile of row) {
             if (tile.squaddieId != undefined) {
                 const id = tile.squaddieId.outOfBattleSquaddieId
                 const label = squaddieLabels.get(id)!
-                lines.push(`  ${label} = ${id} (${tile.row},${tile.col})`)
+                entries.push({ id, label, row: tile.row, col: tile.col })
             }
         }
+    }
+    return entries
+}
+
+const renderFlatSquaddieList = (
+    entries: { id: string; label: string; row: number; col: number }[]
+): string[] => {
+    return entries.map(
+        (entry) => `  ${entry.label} = ${entry.id} (${entry.row},${entry.col})`
+    )
+}
+
+const renderGroupedSquaddieList = (
+    entries: { id: string; label: string; row: number; col: number }[],
+    squaddieAffiliations: Map<string, TSquaddieAffiliation>
+): string[] => {
+    const affiliationOrder: TSquaddieAffiliation[] = [
+        SquaddieAffiliation.PLAYER,
+        SquaddieAffiliation.ALLY,
+        SquaddieAffiliation.ENEMY,
+        SquaddieAffiliation.NONE,
+    ]
+
+    const lines: string[] = []
+    for (const affiliation of affiliationOrder) {
+        const groupEntries = entries.filter(
+            (entry) => squaddieAffiliations.get(entry.id) === affiliation
+        )
+        if (groupEntries.length === 0) continue
+
+        lines.push(`  ${affiliationDisplayName(affiliation)}:`)
+        for (const entry of groupEntries) {
+            lines.push(
+                `    ${entry.label} = ${entry.id} (${entry.row},${entry.col})`
+            )
+        }
+    }
+    return lines
+}
+
+const renderSquaddieList = (
+    overview: MapOverview,
+    squaddieLabels: Map<string, string>,
+    renderInfo?: MapRenderInfo
+): string[] => {
+    if (squaddieLabels.size === 0) return []
+
+    const entries = collectSquaddieEntries(overview, squaddieLabels)
+    const lines: string[] = ["Squaddies:"]
+
+    if (renderInfo == undefined) {
+        lines.push(...renderFlatSquaddieList(entries))
+    } else {
+        lines.push(
+            ...renderGroupedSquaddieList(
+                entries,
+                renderInfo.squaddieAffiliations
+            )
+        )
     }
 
     return lines
 }
 
-export const renderMap = (overview: MapOverview): string => {
+const renderTurnHeader = (renderInfo: MapRenderInfo): string => {
+    if (renderInfo.currentAffiliation != undefined) {
+        const phaseName = affiliationDisplayName(renderInfo.currentAffiliation)
+        return `Turn ${renderInfo.turnNumber} - ${phaseName} Phase`
+    }
+    return `Turn ${renderInfo.turnNumber}`
+}
+
+export const renderMap = (
+    overview: MapOverview,
+    renderInfo?: MapRenderInfo
+): string => {
     const squaddieLabels = buildSquaddieLabels(overview)
+
+    const allLines: string[] = []
+
+    if (renderInfo != undefined) {
+        allLines.push(renderTurnHeader(renderInfo))
+    }
 
     const header = `Map: ${overview.width} columns x ${overview.height} rows`
     const gridLines = renderGridLines(overview, squaddieLabels)
     const legend = renderLegend()
-    const squaddieList = renderSquaddieList(overview, squaddieLabels)
+    const squaddieList = renderSquaddieList(overview, squaddieLabels, renderInfo)
 
-    return [header, ...gridLines, ...legend, ...squaddieList].join("\n")
+    allLines.push(header, ...gridLines, ...legend, ...squaddieList)
+    return allLines.join("\n")
 }

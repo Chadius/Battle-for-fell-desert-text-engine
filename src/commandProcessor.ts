@@ -1,6 +1,8 @@
 import type { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
 import type { BattleSquaddieId } from "../logic/src/squaddie/inBattle/inBattleSquaddieManager.js"
-import { renderMap } from "./mapRenderer.js"
+import { MissionTurnService } from "../logic/src/mission/missionTurn.js"
+import type { TSquaddieAffiliation } from "../logic/src/affiliation/affiliation.js"
+import { renderMap, type MapRenderInfo } from "./mapRenderer.js"
 import { parseCoordinate, inspectCoordinate } from "./coordinateInspector.js"
 import { formatSquaddieDetails } from "./squaddieDetailInspector.js"
 
@@ -68,6 +70,26 @@ const handleShowCommands = (context?: CommandContext): CommandResult => {
     return { action: "showCommands", message: commandList.join("\n") }
 }
 
+// Builds a map of outOfBattleSquaddieId to affiliation for all squaddies on the map
+const buildSquaddieAffiliations = (
+    engine: MissionEngine,
+    overview: ReturnType<MissionEngine["getMapOverview"]>
+): Map<string, TSquaddieAffiliation> => {
+    const squaddieAffiliations = new Map<string, TSquaddieAffiliation>()
+    for (const row of overview.tiles) {
+        for (const tile of row) {
+            if (tile.squaddieId != undefined) {
+                const info = engine.getSquaddieInfo(tile.squaddieId)
+                squaddieAffiliations.set(
+                    tile.squaddieId.outOfBattleSquaddieId,
+                    info.affiliation
+                )
+            }
+        }
+    }
+    return squaddieAffiliations
+}
+
 const handleShowMap = (engine?: MissionEngine): CommandResult => {
     if (engine == undefined) {
         return {
@@ -77,7 +99,22 @@ const handleShowMap = (engine?: MissionEngine): CommandResult => {
     }
 
     const overview = engine.getMapOverview()
-    return { action: "showMap", message: renderMap(overview) }
+
+    const turnNumber = engine.getCurrentTurnNumber()
+    const affiliationTurn = engine.getCurrentAffiliationTurn()
+    const currentAffiliation =
+        MissionTurnService.getSquaddieAffiliationForAffiliationTurn(
+            affiliationTurn
+        )
+    const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
+
+    const renderInfo: MapRenderInfo = {
+        turnNumber,
+        currentAffiliation,
+        squaddieAffiliations,
+    }
+
+    return { action: "showMap", message: renderMap(overview, renderInfo) }
 }
 
 const handleInspectCoordinate = (

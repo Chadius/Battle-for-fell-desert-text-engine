@@ -3,8 +3,11 @@ import {
     renderMap,
     terrainToSymbol,
     buildSquaddieLabels,
+    affiliationDisplayName,
+    type MapRenderInfo,
 } from "./mapRenderer.js"
 import type { MapOverview } from "../logic/src/mission/missionEngine/missionEngine.js"
+import { SquaddieAffiliation } from "../logic/src/affiliation/affiliation.js"
 
 describe("mapRenderer", () => {
     describe("terrainToSymbol", () => {
@@ -22,6 +25,32 @@ describe("mapRenderer", () => {
 
         it("returns # for wall terrain (cost undefined, canStop=false)", () => {
             expect(terrainToSymbol(undefined, false)).toBe("#")
+        })
+    })
+
+    describe("affiliationDisplayName", () => {
+        it("returns Player for PLAYER affiliation", () => {
+            expect(affiliationDisplayName(SquaddieAffiliation.PLAYER)).toBe(
+                "Player"
+            )
+        })
+
+        it("returns Ally for ALLY affiliation", () => {
+            expect(affiliationDisplayName(SquaddieAffiliation.ALLY)).toBe(
+                "Ally"
+            )
+        })
+
+        it("returns Enemy for ENEMY affiliation", () => {
+            expect(affiliationDisplayName(SquaddieAffiliation.ENEMY)).toBe(
+                "Enemy"
+            )
+        })
+
+        it("returns None for NONE affiliation", () => {
+            expect(affiliationDisplayName(SquaddieAffiliation.NONE)).toBe(
+                "None"
+            )
         })
     })
 
@@ -486,7 +515,6 @@ describe("mapRenderer", () => {
             expect(output).toContain("S = slither-demon (3,4)")
 
             const lines = output.split("\n")
-            // Find grid lines by looking after the header
             const headerIndex = lines.findIndex((line) =>
                 line.startsWith("Map:")
             )
@@ -494,6 +522,229 @@ describe("mapRenderer", () => {
             expect(lines[headerIndex + 2]).toBe(" . _ . # .")
             expect(lines[headerIndex + 3]).toBe(". . . . ~")
             expect(lines[headerIndex + 4]).toBe(" ~ . _ . S")
+        })
+
+        it("shows turn header with affiliation phase when renderInfo is provided", () => {
+            const overview: MapOverview = {
+                width: 1,
+                height: 1,
+                tiles: [
+                    [
+                        {
+                            row: 0,
+                            col: 0,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: undefined,
+                        },
+                    ],
+                ],
+            }
+
+            const renderInfo: MapRenderInfo = {
+                turnNumber: 0,
+                currentAffiliation: SquaddieAffiliation.PLAYER,
+                squaddieAffiliations: new Map(),
+            }
+
+            const output = renderMap(overview, renderInfo)
+            const lines = output.split("\n")
+            expect(lines[0]).toBe("Turn 0 - Player Phase")
+            expect(lines[1]).toContain("Map:")
+        })
+
+        it("shows turn header without phase when currentAffiliation is undefined", () => {
+            const overview: MapOverview = {
+                width: 1,
+                height: 1,
+                tiles: [
+                    [
+                        {
+                            row: 0,
+                            col: 0,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: undefined,
+                        },
+                    ],
+                ],
+            }
+
+            const renderInfo: MapRenderInfo = {
+                turnNumber: 2,
+                currentAffiliation: undefined,
+                squaddieAffiliations: new Map(),
+            }
+
+            const output = renderMap(overview, renderInfo)
+            const lines = output.split("\n")
+            expect(lines[0]).toBe("Turn 2")
+            expect(lines[1]).toContain("Map:")
+        })
+
+        it("groups squaddies under their affiliation headers", () => {
+            const overview: MapOverview = {
+                width: 2,
+                height: 1,
+                tiles: [
+                    [
+                        {
+                            row: 0,
+                            col: 0,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: {
+                                outOfBattleSquaddieId: "lini",
+                                inBattleSquaddieId: 0,
+                            },
+                        },
+                        {
+                            row: 0,
+                            col: 1,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: {
+                                outOfBattleSquaddieId: "slither-demon",
+                                inBattleSquaddieId: 1,
+                            },
+                        },
+                    ],
+                ],
+            }
+
+            const renderInfo: MapRenderInfo = {
+                turnNumber: 0,
+                currentAffiliation: SquaddieAffiliation.PLAYER,
+                squaddieAffiliations: new Map([
+                    ["lini", SquaddieAffiliation.PLAYER],
+                    ["slither-demon", SquaddieAffiliation.ENEMY],
+                ]),
+            }
+
+            const output = renderMap(overview, renderInfo)
+            expect(output).toContain("Squaddies:")
+            expect(output).toContain("  Player:")
+            expect(output).toContain("    L = lini (0,0)")
+            expect(output).toContain("  Enemy:")
+            expect(output).toContain("    S = slither-demon (0,1)")
+        })
+
+        it("shows only affiliations that have squaddies", () => {
+            const overview: MapOverview = {
+                width: 1,
+                height: 1,
+                tiles: [
+                    [
+                        {
+                            row: 0,
+                            col: 0,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: {
+                                outOfBattleSquaddieId: "lini",
+                                inBattleSquaddieId: 0,
+                            },
+                        },
+                    ],
+                ],
+            }
+
+            const renderInfo: MapRenderInfo = {
+                turnNumber: 0,
+                currentAffiliation: SquaddieAffiliation.PLAYER,
+                squaddieAffiliations: new Map([
+                    ["lini", SquaddieAffiliation.PLAYER],
+                ]),
+            }
+
+            const output = renderMap(overview, renderInfo)
+            expect(output).toContain("  Player:")
+            expect(output).not.toContain("  Enemy:")
+            expect(output).not.toContain("  Ally:")
+            expect(output).not.toContain("  None:")
+        })
+
+        it("preserves group order: Player before Enemy", () => {
+            const overview: MapOverview = {
+                width: 2,
+                height: 1,
+                tiles: [
+                    [
+                        {
+                            row: 0,
+                            col: 0,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: {
+                                outOfBattleSquaddieId: "slither-demon",
+                                inBattleSquaddieId: 1,
+                            },
+                        },
+                        {
+                            row: 0,
+                            col: 1,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: {
+                                outOfBattleSquaddieId: "lini",
+                                inBattleSquaddieId: 0,
+                            },
+                        },
+                    ],
+                ],
+            }
+
+            const renderInfo: MapRenderInfo = {
+                turnNumber: 0,
+                currentAffiliation: SquaddieAffiliation.PLAYER,
+                squaddieAffiliations: new Map([
+                    ["slither-demon", SquaddieAffiliation.ENEMY],
+                    ["lini", SquaddieAffiliation.PLAYER],
+                ]),
+            }
+
+            const output = renderMap(overview, renderInfo)
+            const playerIndex = output.indexOf("  Player:")
+            const enemyIndex = output.indexOf("  Enemy:")
+            expect(playerIndex).toBeLessThan(enemyIndex)
+        })
+
+        it("falls back to flat list when renderInfo is not provided", () => {
+            const overview: MapOverview = {
+                width: 2,
+                height: 1,
+                tiles: [
+                    [
+                        {
+                            row: 0,
+                            col: 0,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: {
+                                outOfBattleSquaddieId: "lini",
+                                inBattleSquaddieId: 0,
+                            },
+                        },
+                        {
+                            row: 0,
+                            col: 1,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: {
+                                outOfBattleSquaddieId: "slither-demon",
+                                inBattleSquaddieId: 1,
+                            },
+                        },
+                    ],
+                ],
+            }
+
+            const output = renderMap(overview)
+            expect(output).toContain("Squaddies:")
+            expect(output).toContain("  L = lini (0,0)")
+            expect(output).toContain("  S = slither-demon (0,1)")
+            expect(output).not.toContain("  Player:")
+            expect(output).not.toContain("  Enemy:")
         })
 
         it("omits the squaddies section when there are no squaddies", () => {

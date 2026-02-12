@@ -243,5 +243,20 @@ describe("processCommand", () => {
             expect(result.message).toContain("lini")
             expect(result.message).toContain("slither-demon")
         })
+
+        it("includes turn header in map output", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("M", engine)
+            expect(result.message).toContain("Turn 0")
+        })
+
+        it("groups squaddies by affiliation in map output", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("M", engine)
+            expect(result.message).toContain("  Player:")
+            expect(result.message).toContain("    L = lini")
+            expect(result.message).toContain("  Enemy:")
+            expect(result.message).toContain("    S = slither-demon")
+        })
     })
 })
