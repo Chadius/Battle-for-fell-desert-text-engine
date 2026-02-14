@@ -204,6 +204,34 @@ describe("processCommand", () => {
             const result = processCommand("L", engine, context)
             expect(result.message).not.toContain("Conditions:")
         })
+
+        it("shows actions section with valid and invalid actions", () => {
+            const engine = new MissionEngineTestHarness()
+            const context: CommandContext = {
+                selectedSquaddieId: engine.getLiniSquaddieId(),
+            }
+            const result = processCommand("L", engine, context)
+            expect(result.message).toContain("Actions:")
+        })
+
+        it("shows End Turn and Move as valid actions", () => {
+            const engine = new MissionEngineTestHarness()
+            const context: CommandContext = {
+                selectedSquaddieId: engine.getLiniSquaddieId(),
+            }
+            const result = processCommand("L", engine, context)
+            expect(result.message).toContain("End Turn (all AP)")
+            expect(result.message).toContain("Move")
+        })
+
+        it("shows Scimitar as invalid when no foes in range", () => {
+            const engine = new MissionEngineTestHarness()
+            const context: CommandContext = {
+                selectedSquaddieId: engine.getLiniSquaddieId(),
+            }
+            const result = processCommand("L", engine, context)
+            expect(result.message).toContain("Scimitar -")
+        })
     })
 
     describe("showMap action", () => {

@@ -5,6 +5,8 @@ import type { TSquaddieAffiliation } from "../logic/src/affiliation/affiliation.
 import { renderMap, type MapRenderInfo } from "./mapRenderer.js"
 import { parseCoordinate, inspectCoordinate } from "./coordinateInspector.js"
 import { formatSquaddieDetails } from "./squaddieDetailInspector.js"
+import { SquaddieActionInspector} from "./squaddieActionInspector.js"
+import type { SquaddieAction } from "../logic/src/squaddieAction/squaddieAction.js"
 
 export type CommandAction =
     | "quit"
@@ -169,6 +171,21 @@ const handleLookAtSquaddie = (
     const conditionsOutput = formatSquaddieDetails(info.conditions)
     if (conditionsOutput.length > 0) {
         lines.push(conditionsOutput)
+    }
+
+    const validity = engine.getSquaddieActionValidity(
+        context.selectedSquaddieId
+    )
+    const actionsById = new Map<string, SquaddieAction>()
+    for (const validAction of validity.validActions) {
+        actionsById.set(
+            validAction.actionId,
+            engine.getActionById(validAction.actionId)
+        )
+    }
+    const actionsOutput = SquaddieActionInspector.formatSquaddieActions(validity, actionsById)
+    if (actionsOutput.length > 0) {
+        lines.push(actionsOutput)
     }
 
     return {
