@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { processCommand } from "./commandProcessor.js"
+import { processCommand, InteractionPhase } from "./commandProcessor.js"
 import type { CommandContext } from "./commandProcessor.js"
 import { MissionEngineTestHarness } from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
 
@@ -58,6 +58,8 @@ describe("processCommand", () => {
             const engine = new MissionEngineTestHarness()
             const context: CommandContext = {
                 selectedSquaddieId: engine.getLiniSquaddieId(),
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
             }
             const result = processCommand("?", engine, context)
             expect(result.message).toContain("L - Look at selected squaddie")
@@ -66,6 +68,11 @@ describe("processCommand", () => {
         it("does not show L command when no squaddie is selected", () => {
             const result = processCommand("?")
             expect(result.message).not.toContain("L - Look at selected squaddie")
+        })
+
+        it("shows W command in help text", () => {
+            const result = processCommand("?")
+            expect(result.message).toContain("W - Who can act this phase?")
         })
     })
 
@@ -105,6 +112,10 @@ describe("processCommand", () => {
             expect(result.updatedContext!.selectedSquaddieId).toEqual(
                 engine.getLiniSquaddieId()
             )
+            expect(result.updatedContext!.interactionPhase).toBe(
+                InteractionPhase.BROWSING
+            )
+            expect(result.updatedContext!.actingSquaddieId).toBeUndefined()
         })
 
         it("clears updatedContext when no squaddie is at the coordinate", () => {
@@ -112,6 +123,10 @@ describe("processCommand", () => {
             const result = processCommand("2, 2", engine)
             expect(result.updatedContext).toBeDefined()
             expect(result.updatedContext!.selectedSquaddieId).toBeUndefined()
+            expect(result.updatedContext!.interactionPhase).toBe(
+                InteractionPhase.BROWSING
+            )
+            expect(result.updatedContext!.actingSquaddieId).toBeUndefined()
         })
 
         it("clears updatedContext for off-map coordinates", () => {
@@ -119,6 +134,10 @@ describe("processCommand", () => {
             const result = processCommand("10, 10", engine)
             expect(result.updatedContext).toBeDefined()
             expect(result.updatedContext!.selectedSquaddieId).toBeUndefined()
+            expect(result.updatedContext!.interactionPhase).toBe(
+                InteractionPhase.BROWSING
+            )
+            expect(result.updatedContext!.actingSquaddieId).toBeUndefined()
         })
     })
 
@@ -127,6 +146,8 @@ describe("processCommand", () => {
             const engine = new MissionEngineTestHarness()
             const context: CommandContext = {
                 selectedSquaddieId: engine.getLiniSquaddieId(),
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
             }
             const result = processCommand("L", engine, context)
             expect(result.action).toBe("lookAtSquaddie")
@@ -148,6 +169,8 @@ describe("processCommand", () => {
                     inBattleSquaddieId: 0,
                     outOfBattleSquaddieId: "test",
                 },
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
             }
             const result = processCommand("L", undefined, context)
             expect(result.action).toBe("lookAtSquaddie")
@@ -160,6 +183,8 @@ describe("processCommand", () => {
             const engine = new MissionEngineTestHarness()
             const context: CommandContext = {
                 selectedSquaddieId: engine.getLiniSquaddieId(),
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
             }
             const result = processCommand("l", engine, context)
             expect(result.action).toBe("lookAtSquaddie")
@@ -170,6 +195,8 @@ describe("processCommand", () => {
             const engine = new MissionEngineTestHarness()
             const context: CommandContext = {
                 selectedSquaddieId: engine.getLiniSquaddieId(),
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
             }
             const result = processCommand("  L  ", engine, context)
             expect(result.action).toBe("lookAtSquaddie")
@@ -180,6 +207,8 @@ describe("processCommand", () => {
             const engine = new MissionEngineTestHarness()
             const context: CommandContext = {
                 selectedSquaddieId: engine.getLiniSquaddieId(),
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
             }
             const result = processCommand("L", engine, context)
             expect(result.message).toContain("Lini")
@@ -190,6 +219,8 @@ describe("processCommand", () => {
             const engine = new MissionEngineTestHarness()
             const context: CommandContext = {
                 selectedSquaddieId: engine.getLiniSquaddieId(),
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
             }
             const result = processCommand("L", engine, context)
             expect(result.message).toContain("Hit Points:")
@@ -200,6 +231,8 @@ describe("processCommand", () => {
             const engine = new MissionEngineTestHarness()
             const context: CommandContext = {
                 selectedSquaddieId: engine.getLiniSquaddieId(),
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
             }
             const result = processCommand("L", engine, context)
             expect(result.message).not.toContain("Conditions:")
@@ -209,6 +242,8 @@ describe("processCommand", () => {
             const engine = new MissionEngineTestHarness()
             const context: CommandContext = {
                 selectedSquaddieId: engine.getLiniSquaddieId(),
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
             }
             const result = processCommand("L", engine, context)
             expect(result.message).toContain("Actions:")
@@ -218,6 +253,8 @@ describe("processCommand", () => {
             const engine = new MissionEngineTestHarness()
             const context: CommandContext = {
                 selectedSquaddieId: engine.getLiniSquaddieId(),
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
             }
             const result = processCommand("L", engine, context)
             expect(result.message).toContain("End Turn (all AP)")
@@ -228,6 +265,8 @@ describe("processCommand", () => {
             const engine = new MissionEngineTestHarness()
             const context: CommandContext = {
                 selectedSquaddieId: engine.getLiniSquaddieId(),
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
             }
             const result = processCommand("L", engine, context)
             expect(result.message).toContain("Scimitar -")
@@ -285,6 +324,52 @@ describe("processCommand", () => {
             expect(result.message).toContain("    L = lini")
             expect(result.message).toContain("  Enemy:")
             expect(result.message).toContain("    S = slither-demon")
+        })
+    })
+
+    describe("listControllableSquaddies action", () => {
+        it("returns listControllableSquaddies for W command", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("W", engine)
+            expect(result.action).toBe("listControllableSquaddies")
+        })
+
+        it("is case-insensitive", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("w", engine)
+            expect(result.action).toBe("listControllableSquaddies")
+        })
+
+        it("handles surrounding whitespace", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("  W  ", engine)
+            expect(result.action).toBe("listControllableSquaddies")
+        })
+
+        it("returns error when engine is undefined", () => {
+            const result = processCommand("W")
+            expect(result.action).toBe("listControllableSquaddies")
+            expect(result.message).toBe(
+                "No engine available to list controllable squaddies."
+            )
+        })
+
+        it("lists squaddies who can act during PLAYER_TURN", () => {
+            const engine = new MissionEngineTestHarness()
+            engine.transitionToNextPhase()
+            engine.transitionToNextPhase()
+
+            const result = processCommand("W", engine)
+            expect(result.message).toContain("Squaddies who can act:")
+            expect(result.message).toContain("Lini")
+        })
+
+        it("shows no squaddies message during TURN_START", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("W", engine)
+            expect(result.message).toBe(
+                "No squaddies can act this phase."
+            )
         })
     })
 })

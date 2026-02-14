@@ -7,6 +7,17 @@ import { parseCoordinate, inspectCoordinate } from "./coordinateInspector.js"
 import { formatSquaddieDetails } from "./squaddieDetailInspector.js"
 import { SquaddieActionInspector} from "./squaddieActionInspector.js"
 import type { SquaddieAction } from "../logic/src/squaddieAction/squaddieAction.js"
+import { ControllableSquaddieInspector } from "./controllableSquaddieInspector.js"
+
+export const InteractionPhase = {
+    BROWSING: "BROWSING",
+    SELECTING_ACTION: "SELECTING_ACTION",
+    SELECTING_TARGET: "SELECTING_TARGET",
+    CONFIRMING_ACTION: "CONFIRMING_ACTION",
+    VIEWING_RESULTS: "VIEWING_RESULTS",
+} as const
+
+export type TInteractionPhase = (typeof InteractionPhase)[keyof typeof InteractionPhase]
 
 export type CommandAction =
     | "quit"
@@ -15,9 +26,12 @@ export type CommandAction =
     | "showCommands"
     | "inspectCoordinate"
     | "lookAtSquaddie"
+    | "listControllableSquaddies"
 
 export interface CommandContext {
     selectedSquaddieId: BattleSquaddieId | undefined
+    interactionPhase: TInteractionPhase
+    actingSquaddieId: BattleSquaddieId | undefined
 }
 
 export interface CommandResult {
@@ -49,6 +63,10 @@ export const processCommand = (
         return handleLookAtSquaddie(engine, context)
     }
 
+    if (normalizedInput === "W") {
+        return handleListControllableSquaddies(engine)
+    }
+
     const coordinate = parseCoordinate(rawInput)
     if (coordinate != undefined) {
         return handleInspectCoordinate(engine, coordinate)
@@ -60,6 +78,7 @@ export const processCommand = (
 const handleShowCommands = (context?: CommandContext): CommandResult => {
     const commandList = [
         "M - Show the map",
+        "W - Who can act this phase?",
         "row, col - Inspect a coordinate",
     ]
 
@@ -136,7 +155,11 @@ const handleInspectCoordinate = (
     return {
         action: "inspectCoordinate",
         message,
-        updatedContext: { selectedSquaddieId: squaddieId },
+        updatedContext: {
+            selectedSquaddieId: squaddieId,
+            interactionPhase: InteractionPhase.BROWSING,
+            actingSquaddieId: undefined,
+        },
     }
 }
 
@@ -192,4 +215,18 @@ const handleLookAtSquaddie = (
         action: "lookAtSquaddie",
         message: lines.join("\n"),
     }
+}
+
+const handleListControllableSquaddies = (
+    engine?: MissionEngine
+): CommandResult => {
+    if (engine == undefined) {
+        return {
+            action: "listControllableSquaddies",
+            message: "No engine available to list controllable squaddies.",
+        }
+    }
+    const entries = ControllableSquaddieInspector.gatherEntries(engine)
+    const message = ControllableSquaddieInspector.formatEntries(entries)
+    return { action: "listControllableSquaddies", message }
 }
