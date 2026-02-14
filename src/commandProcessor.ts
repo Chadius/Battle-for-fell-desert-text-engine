@@ -1,6 +1,9 @@
 import type { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
 import type { BattleSquaddieId } from "../logic/src/squaddie/inBattle/inBattleSquaddieManager.js"
-import { MissionTurnService } from "../logic/src/mission/missionTurn.js"
+import {
+    MissionTurnService,
+    type TMissionAffiliationTurn,
+} from "../logic/src/mission/missionTurn.js"
 import type { TSquaddieAffiliation } from "../logic/src/affiliation/affiliation.js"
 import { renderMap, type MapRenderInfo } from "./mapRenderer.js"
 import { parseCoordinate, inspectCoordinate } from "./coordinateInspector.js"
@@ -24,6 +27,7 @@ export type CommandAction =
     | "echo"
     | "showMap"
     | "showCommands"
+    | "showPhase"
     | "inspectCoordinate"
     | "lookAtSquaddie"
     | "listControllableSquaddies"
@@ -67,6 +71,10 @@ export const processCommand = (
         return handleListControllableSquaddies(engine)
     }
 
+    if (normalizedInput === "P") {
+        return handleShowPhase(engine)
+    }
+
     const coordinate = parseCoordinate(rawInput)
     if (coordinate != undefined) {
         return handleInspectCoordinate(engine, coordinate)
@@ -79,6 +87,7 @@ const handleShowCommands = (context?: CommandContext): CommandResult => {
     const commandList = [
         "M - Show the map",
         "W - Who can act this phase?",
+        "P - Show current phase",
         "row, col - Inspect a coordinate",
     ]
 
@@ -91,7 +100,6 @@ const handleShowCommands = (context?: CommandContext): CommandResult => {
     return { action: "showCommands", message: commandList.join("\n") }
 }
 
-// Builds a map of outOfBattleSquaddieId to affiliation for all squaddies on the map
 const buildSquaddieAffiliations = (
     engine: MissionEngine,
     overview: ReturnType<MissionEngine["getMapOverview"]>
@@ -229,4 +237,33 @@ const handleListControllableSquaddies = (
     const entries = ControllableSquaddieInspector.gatherEntries(engine)
     const message = ControllableSquaddieInspector.formatEntries(entries)
     return { action: "listControllableSquaddies", message }
+}
+
+export const transitionToNextPhase = (
+    engine: MissionEngine
+): TMissionAffiliationTurn => {
+    engine.transitionToNextPhase()
+    return engine.getCurrentAffiliationTurn()
+}
+
+const formatPhaseName = (phase: TMissionAffiliationTurn): string => {
+    return phase
+        .split("_")
+        .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
+        .join(" ")
+}
+
+const handleShowPhase = (engine?: MissionEngine): CommandResult => {
+    if (engine == undefined) {
+        return {
+            action: "showPhase",
+            message: "No engine available to show phase.",
+        }
+    }
+    const phase = engine.getCurrentAffiliationTurn()
+    const turnNumber = engine.getCurrentTurnNumber()
+    return {
+        action: "showPhase",
+        message: `Turn ${turnNumber} - ${formatPhaseName(phase)}`,
+    }
 }

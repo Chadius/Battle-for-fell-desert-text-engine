@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest"
-import { processCommand, InteractionPhase } from "./commandProcessor.js"
+import {
+    processCommand,
+    InteractionPhase,
+    transitionToNextPhase,
+} from "./commandProcessor.js"
 import type { CommandContext } from "./commandProcessor.js"
 import { MissionEngineTestHarness } from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
+import { MissionAffiliationTurn } from "../logic/src/mission/missionTurn.js"
 
 describe("processCommand", () => {
     describe("quit action", () => {
@@ -73,6 +78,11 @@ describe("processCommand", () => {
         it("shows W command in help text", () => {
             const result = processCommand("?")
             expect(result.message).toContain("W - Who can act this phase?")
+        })
+
+        it("shows P command in help text", () => {
+            const result = processCommand("?")
+            expect(result.message).toContain("P - Show current phase")
         })
     })
 
@@ -370,6 +380,69 @@ describe("processCommand", () => {
             expect(result.message).toBe(
                 "No squaddies can act this phase."
             )
+        })
+    })
+
+    describe("transitionToNextPhase", () => {
+        it("returns current phase after transition from TURN_START", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = transitionToNextPhase(engine)
+            expect(result).toBe(MissionAffiliationTurn.PLAYER_TURN_START)
+        })
+
+        it("returns PLAYER_TURN after two transitions from TURN_START", () => {
+            const engine = new MissionEngineTestHarness()
+            transitionToNextPhase(engine)
+            const result = transitionToNextPhase(engine)
+            expect(result).toBe(MissionAffiliationTurn.PLAYER_TURN)
+        })
+
+        it("stays at PLAYER_TURN when squaddies can still act", () => {
+            const engine = new MissionEngineTestHarness()
+            transitionToNextPhase(engine)
+            transitionToNextPhase(engine)
+            const result = transitionToNextPhase(engine)
+            expect(result).toBe(MissionAffiliationTurn.PLAYER_TURN)
+        })
+    })
+
+    describe("showPhase action", () => {
+        it("returns showPhase action for P command", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("P", engine)
+            expect(result.action).toBe("showPhase")
+        })
+
+        it("is case-insensitive", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("p", engine)
+            expect(result.action).toBe("showPhase")
+        })
+
+        it("handles surrounding whitespace", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("  P  ", engine)
+            expect(result.action).toBe("showPhase")
+        })
+
+        it("returns error when engine is undefined", () => {
+            const result = processCommand("P")
+            expect(result.action).toBe("showPhase")
+            expect(result.message).toBe("No engine available to show phase.")
+        })
+
+        it("shows turn number and phase name at TURN_START", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("P", engine)
+            expect(result.message).toBe("Turn 0 - Turn Start")
+        })
+
+        it("shows updated phase after advancing", () => {
+            const engine = new MissionEngineTestHarness()
+            transitionToNextPhase(engine)
+            transitionToNextPhase(engine)
+            const result = processCommand("P", engine)
+            expect(result.message).toBe("Turn 0 - Player Turn")
         })
     })
 })
