@@ -2,6 +2,7 @@ import * as readline from "node:readline"
 import { MissionEngineTestHarness } from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
 import { processCommand, InteractionPhase } from "./commandProcessor.js"
 import type { CommandContext } from "./commandProcessor.js"
+import { MissionObjectiveInspector } from "./missionObjectiveInspector.js"
 
 const engine = new MissionEngineTestHarness()
 
@@ -9,6 +10,13 @@ console.log("Battle of Fell Desert CLI")
 console.log("=========================")
 console.log("Game engine initialized.")
 console.log("Enter 'Q' to quit, '?' for commands.\n")
+
+const initialObjectiveEntries = MissionObjectiveInspector.gatherEntries(engine)
+const initialObjectivesDisplay = MissionObjectiveInspector.formatEntries(initialObjectiveEntries)
+if (initialObjectivesDisplay.length > 0) {
+    console.log(initialObjectivesDisplay)
+    console.log()
+}
 
 let currentContext: CommandContext = {
     selectedSquaddieId: undefined,

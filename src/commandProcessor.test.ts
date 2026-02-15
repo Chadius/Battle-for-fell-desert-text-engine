@@ -84,6 +84,11 @@ describe("processCommand", () => {
             const result = processCommand("?")
             expect(result.message).toContain("P - Show current phase")
         })
+
+        it("shows O command in help text", () => {
+            const result = processCommand("?")
+            expect(result.message).toContain("O - Show objectives")
+        })
     })
 
     describe("inspectCoordinate action", () => {
@@ -334,6 +339,52 @@ describe("processCommand", () => {
             expect(result.message).toContain("    L = lini")
             expect(result.message).toContain("  Enemy:")
             expect(result.message).toContain("    S = slither-demon")
+        })
+
+        it("includes objectives in map output", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("M", engine)
+            expect(result.message).toContain("Objective:")
+            expect(result.message).toContain("- Defeat enemy:")
+            expect(result.message).toContain("Failure:")
+            expect(result.message).toContain("- Defeat players:")
+        })
+    })
+
+    describe("showObjectives action", () => {
+        it("returns showObjectives action for O command", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("O", engine)
+            expect(result.action).toBe("showObjectives")
+        })
+
+        it("is case-insensitive", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("o", engine)
+            expect(result.action).toBe("showObjectives")
+        })
+
+        it("handles surrounding whitespace", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("  O  ", engine)
+            expect(result.action).toBe("showObjectives")
+        })
+
+        it("returns error when engine is undefined", () => {
+            const result = processCommand("O")
+            expect(result.action).toBe("showObjectives")
+            expect(result.message).toBe(
+                "No engine available to show objectives."
+            )
+        })
+
+        it("shows objectives and failure conditions", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("O", engine)
+            expect(result.message).toContain("Objective:")
+            expect(result.message).toContain("- Defeat enemy:")
+            expect(result.message).toContain("Failure:")
+            expect(result.message).toContain("- Defeat players:")
         })
     })
 

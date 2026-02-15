@@ -8,6 +8,7 @@ export interface MapRenderInfo {
     turnNumber: number
     currentAffiliation: TSquaddieAffiliation | undefined
     squaddieAffiliations: Map<string, TSquaddieAffiliation>
+    objectivesDisplay?: string
 }
 
 export const affiliationDisplayName = (
@@ -229,5 +230,10 @@ export const renderMap = (
     const squaddieList = renderSquaddieList(overview, squaddieLabels, renderInfo)
 
     allLines.push(header, ...gridLines, ...legend, ...squaddieList)
+
+    if (renderInfo?.objectivesDisplay != undefined) {
+        allLines.push("", renderInfo.objectivesDisplay)
+    }
+
     return allLines.join("\n")
 }

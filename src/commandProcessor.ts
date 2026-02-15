@@ -11,6 +11,7 @@ import { formatSquaddieDetails } from "./squaddieDetailInspector.js"
 import { SquaddieActionInspector} from "./squaddieActionInspector.js"
 import type { SquaddieAction } from "../logic/src/squaddieAction/squaddieAction.js"
 import { ControllableSquaddieInspector } from "./controllableSquaddieInspector.js"
+import { MissionObjectiveInspector } from "./missionObjectiveInspector.js"
 
 export const InteractionPhase = {
     BROWSING: "BROWSING",
@@ -28,6 +29,7 @@ export type CommandAction =
     | "showMap"
     | "showCommands"
     | "showPhase"
+    | "showObjectives"
     | "inspectCoordinate"
     | "lookAtSquaddie"
     | "listControllableSquaddies"
@@ -75,6 +77,10 @@ export const processCommand = (
         return handleShowPhase(engine)
     }
 
+    if (normalizedInput === "O") {
+        return handleShowObjectives(engine)
+    }
+
     const coordinate = parseCoordinate(rawInput)
     if (coordinate != undefined) {
         return handleInspectCoordinate(engine, coordinate)
@@ -86,6 +92,7 @@ export const processCommand = (
 const handleShowCommands = (context?: CommandContext): CommandResult => {
     const commandList = [
         "M - Show the map",
+        "O - Show objectives",
         "W - Who can act this phase?",
         "P - Show current phase",
         "row, col - Inspect a coordinate",
@@ -136,11 +143,14 @@ const handleShowMap = (engine?: MissionEngine): CommandResult => {
             affiliationTurn
         )
     const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
+    const objectiveEntries = MissionObjectiveInspector.gatherEntries(engine)
+    const objectivesDisplay = MissionObjectiveInspector.formatEntries(objectiveEntries)
 
     const renderInfo: MapRenderInfo = {
         turnNumber,
         currentAffiliation,
         squaddieAffiliations,
+        objectivesDisplay: objectivesDisplay.length > 0 ? objectivesDisplay : undefined,
     }
 
     return { action: "showMap", message: renderMap(overview, renderInfo) }
@@ -237,6 +247,23 @@ const handleListControllableSquaddies = (
     const entries = ControllableSquaddieInspector.gatherEntries(engine)
     const message = ControllableSquaddieInspector.formatEntries(entries)
     return { action: "listControllableSquaddies", message }
+}
+
+const handleShowObjectives = (engine?: MissionEngine): CommandResult => {
+    if (engine == undefined) {
+        return {
+            action: "showObjectives",
+            message: "No engine available to show objectives.",
+        }
+    }
+
+    const entries = MissionObjectiveInspector.gatherEntries(engine)
+    const message = MissionObjectiveInspector.formatEntries(entries)
+
+    return {
+        action: "showObjectives",
+        message: message.length > 0 ? message : "No objectives.",
+    }
 }
 
 export const transitionToNextPhase = (
