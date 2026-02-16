@@ -33,6 +33,7 @@ export type CommandAction =
     | "inspectCoordinate"
     | "lookAtSquaddie"
     | "listControllableSquaddies"
+    | "selectAction"
 
 export interface CommandContext {
     selectedSquaddieId: BattleSquaddieId | undefined
@@ -81,6 +82,11 @@ export const processCommand = (
         return handleShowObjectives(engine)
     }
 
+    // "A" prefix: action selection (e.g., "A" to list, "AE" to end turn)
+    if (normalizedInput.startsWith("A")) {
+        return handleSelectAction(normalizedInput, engine, context)
+    }
+
     const coordinate = parseCoordinate(rawInput)
     if (coordinate != undefined) {
         return handleInspectCoordinate(engine, coordinate)
@@ -100,6 +106,7 @@ const handleShowCommands = (context?: CommandContext): CommandResult => {
 
     if (context?.selectedSquaddieId != undefined) {
         commandList.push("L - Look at selected squaddie")
+        commandList.push("A - Select action")
     }
 
     commandList.push("Q - Quit the game", "? - Show all commands")
@@ -232,6 +239,102 @@ const handleLookAtSquaddie = (
     return {
         action: "lookAtSquaddie",
         message: lines.join("\n"),
+    }
+}
+
+// Map of action key suffixes to action IDs
+const actionKeyMap: Record<string, string> = {
+    E: "default-end-turn",
+}
+
+const handleSelectAction = (
+    normalizedInput: string,
+    engine: MissionEngine | undefined,
+    context: CommandContext | undefined
+): CommandResult => {
+    if (engine == undefined) {
+        return {
+            action: "selectAction",
+            message: "No engine available to select actions.",
+        }
+    }
+
+    if (context?.selectedSquaddieId == undefined) {
+        return {
+            action: "selectAction",
+            message:
+                "No squaddie selected. Inspect a coordinate with a squaddie first.",
+        }
+    }
+
+    // "A" alone lists available actions
+    if (normalizedInput === "A") {
+        return handleListActions(engine, context)
+    }
+
+    // "AE" executes End Turn
+    const actionSuffix = normalizedInput.substring(1)
+    const actionId = actionKeyMap[actionSuffix]
+    if (actionId === "default-end-turn") {
+        return handleEndTurn(engine, context)
+    }
+
+    return {
+        action: "selectAction",
+        message: `Unknown action key: ${actionSuffix}`,
+    }
+}
+
+const handleListActions = (
+    engine: MissionEngine,
+    context: CommandContext
+): CommandResult => {
+    const lines: string[] = ["Select an action:"]
+
+    // Build a reverse map from actionId to key for display
+    const actionIdToKey = new Map<string, string>()
+    for (const [key, id] of Object.entries(actionKeyMap)) {
+        actionIdToKey.set(id, key)
+    }
+
+    const validity = engine.getSquaddieActionValidity(
+        context.selectedSquaddieId!
+    )
+    for (const validAction of validity.validActions) {
+        const key = actionIdToKey.get(validAction.actionId)
+        if (key != undefined) {
+            lines.push(`  ${key} - ${validAction.actionName}`)
+        }
+    }
+
+    return { action: "selectAction", message: lines.join("\n") }
+}
+
+const handleEndTurn = (
+    engine: MissionEngine,
+    context: CommandContext
+): CommandResult => {
+    const squaddieId = context.selectedSquaddieId!
+    const info = engine.getSquaddieInfo(squaddieId)
+
+    // Ready the End Turn action (self-targeting)
+    engine.readyAction({
+        actor: squaddieId,
+        targets: [squaddieId],
+        action: { id: "default-end-turn" },
+    })
+
+    // Execute the readied action
+    engine.useActionAndGetResults()
+
+    return {
+        action: "selectAction",
+        message: `${info.name} ends their turn.`,
+        updatedContext: {
+            selectedSquaddieId: undefined,
+            interactionPhase: InteractionPhase.BROWSING,
+            actingSquaddieId: undefined,
+        },
     }
 }
 

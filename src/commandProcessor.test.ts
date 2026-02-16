@@ -457,6 +457,159 @@ describe("processCommand", () => {
         })
     })
 
+    describe("selectAction action", () => {
+        const setupPlayerTurnWithLini = () => {
+            const engine = new MissionEngineTestHarness()
+            engine.transitionToNextPhase()
+            engine.transitionToNextPhase()
+            const context: CommandContext = {
+                selectedSquaddieId: engine.getLiniSquaddieId(),
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+            }
+            return { engine, context }
+        }
+
+        describe("listing actions with A", () => {
+            it("lists available actions when a squaddie is selected", () => {
+                const { engine, context } = setupPlayerTurnWithLini()
+                const result = processCommand("A", engine, context)
+                expect(result.action).toBe("selectAction")
+                expect(result.message).toContain("Select an action:")
+                expect(result.message).toContain("E - End Turn")
+            })
+
+            it("returns error when engine is undefined", () => {
+                const context: CommandContext = {
+                    selectedSquaddieId: {
+                        inBattleSquaddieId: 0,
+                        outOfBattleSquaddieId: "test",
+                    },
+                    interactionPhase: InteractionPhase.BROWSING,
+                    actingSquaddieId: undefined,
+                }
+                const result = processCommand("A", undefined, context)
+                expect(result.action).toBe("selectAction")
+                expect(result.message).toBe(
+                    "No engine available to select actions."
+                )
+            })
+
+            it("returns error when no squaddie is selected", () => {
+                const engine = new MissionEngineTestHarness()
+                const result = processCommand("A", engine)
+                expect(result.action).toBe("selectAction")
+                expect(result.message).toBe(
+                    "No squaddie selected. Inspect a coordinate with a squaddie first."
+                )
+            })
+
+            it("is case-insensitive", () => {
+                const { engine, context } = setupPlayerTurnWithLini()
+                const result = processCommand("a", engine, context)
+                expect(result.action).toBe("selectAction")
+                expect(result.message).toContain("Select an action:")
+            })
+
+            it("handles surrounding whitespace", () => {
+                const { engine, context } = setupPlayerTurnWithLini()
+                const result = processCommand("  A  ", engine, context)
+                expect(result.action).toBe("selectAction")
+                expect(result.message).toContain("Select an action:")
+            })
+        })
+
+        describe("end turn with AE", () => {
+            it("returns message with squaddie name ending their turn", () => {
+                const { engine, context } = setupPlayerTurnWithLini()
+                const result = processCommand("AE", engine, context)
+                expect(result.action).toBe("selectAction")
+                expect(result.message).toContain("ends their turn")
+                expect(result.message).toContain("Lini")
+            })
+
+            it("clears selected and acting squaddie from context", () => {
+                const { engine, context } = setupPlayerTurnWithLini()
+                const result = processCommand("AE", engine, context)
+                expect(result.updatedContext).toBeDefined()
+                expect(
+                    result.updatedContext!.selectedSquaddieId
+                ).toBeUndefined()
+                expect(
+                    result.updatedContext!.actingSquaddieId
+                ).toBeUndefined()
+            })
+
+            it("sets interaction phase to BROWSING", () => {
+                const { engine, context } = setupPlayerTurnWithLini()
+                const result = processCommand("AE", engine, context)
+                expect(result.updatedContext).toBeDefined()
+                expect(result.updatedContext!.interactionPhase).toBe(
+                    InteractionPhase.BROWSING
+                )
+            })
+
+            it("spends all action points", () => {
+                const { engine, context } = setupPlayerTurnWithLini()
+                processCommand("AE", engine, context)
+                const info = engine.getSquaddieInfo(
+                    context.selectedSquaddieId!
+                )
+                expect(info.currentActionPoints).toBe(0)
+            })
+
+            it("is case-insensitive and handles whitespace", () => {
+                const { engine, context } = setupPlayerTurnWithLini()
+                const result = processCommand("  ae  ", engine, context)
+                expect(result.action).toBe("selectAction")
+                expect(result.message).toContain("ends their turn")
+            })
+
+            it("returns error when engine is undefined", () => {
+                const context: CommandContext = {
+                    selectedSquaddieId: {
+                        inBattleSquaddieId: 0,
+                        outOfBattleSquaddieId: "test",
+                    },
+                    interactionPhase: InteractionPhase.BROWSING,
+                    actingSquaddieId: undefined,
+                }
+                const result = processCommand("AE", undefined, context)
+                expect(result.action).toBe("selectAction")
+                expect(result.message).toBe(
+                    "No engine available to select actions."
+                )
+            })
+
+            it("returns error when no squaddie is selected", () => {
+                const engine = new MissionEngineTestHarness()
+                const result = processCommand("AE", engine)
+                expect(result.action).toBe("selectAction")
+                expect(result.message).toBe(
+                    "No squaddie selected. Inspect a coordinate with a squaddie first."
+                )
+            })
+        })
+
+        describe("help text for A command", () => {
+            it("shows A command when a squaddie is selected", () => {
+                const engine = new MissionEngineTestHarness()
+                const context: CommandContext = {
+                    selectedSquaddieId: engine.getLiniSquaddieId(),
+                    interactionPhase: InteractionPhase.BROWSING,
+                    actingSquaddieId: undefined,
+                }
+                const result = processCommand("?", engine, context)
+                expect(result.message).toContain("A - Select action")
+            })
+
+            it("does not show A command when no squaddie is selected", () => {
+                const result = processCommand("?")
+                expect(result.message).not.toContain("A - Select action")
+            })
+        })
+    })
+
     describe("showPhase action", () => {
         it("returns showPhase action for P command", () => {
             const engine = new MissionEngineTestHarness()
