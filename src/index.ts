@@ -1,39 +1,18 @@
 import * as readline from "node:readline"
 import { MissionEngineTestHarness } from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
-import { processCommand, InteractionPhase } from "./commandProcessor.js"
-import type { CommandContext } from "./commandProcessor.js"
-import { MissionObjectiveInspector } from "./missionObjectiveInspector.js"
+import { TextMissionRunner } from "./textMissionRunner.js"
 
 const engine = new MissionEngineTestHarness()
+const runner = new TextMissionRunner(engine)
 
-console.log("Battle of Fell Desert CLI")
-console.log("=========================")
-console.log("Game engine initialized.")
-console.log("Enter 'Q' to quit, '?' for commands.\n")
-
-const initialObjectiveEntries = MissionObjectiveInspector.gatherEntries(engine)
-const initialObjectivesDisplay = MissionObjectiveInspector.formatEntries(initialObjectiveEntries)
-if (initialObjectivesDisplay.length > 0) {
-    console.log(initialObjectivesDisplay)
-    console.log()
-}
-
-let currentContext: CommandContext = {
-    selectedSquaddieId: undefined,
-    interactionPhase: InteractionPhase.BROWSING,
-    actingSquaddieId: undefined,
-}
+console.log(runner.getWelcomeText())
 
 const prompt = (rl: readline.Interface): void => {
     rl.question("> ", (answer) => {
-        const result = processCommand(answer, engine, currentContext)
-        console.log(result.message)
+        const result = runner.processInput(answer)
+        console.log(result.text)
 
-        if (result.updatedContext != undefined) {
-            currentContext = result.updatedContext
-        }
-
-        if (result.action === "quit") {
+        if (result.shouldQuit) {
             rl.close()
             return
         }
