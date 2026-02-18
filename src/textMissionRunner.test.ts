@@ -45,4 +45,32 @@ describe("TextMissionRunner", () => {
             expect(lookResult.text).toContain("Lini")
         })
     })
+
+    describe("phase announcements", () => {
+        describe("getWelcomeText", () => {
+            it("contains the turn start announcement for the initial turn", () => {
+                const engine = new MissionEngineTestHarness()
+                const runner = new TextMissionRunner(engine)
+                expect(runner.getWelcomeText()).toContain("Turn 0 start")
+            })
+
+            it("contains the player turn announcement after advancing through startup phases", () => {
+                const engine = new MissionEngineTestHarness()
+                const runner = new TextMissionRunner(engine)
+                expect(runner.getWelcomeText()).toContain("Player Turn")
+            })
+        })
+
+        describe("processInput", () => {
+            it("announces enemy turn after Lini ends her turn", () => {
+                const engine = new MissionEngineTestHarness()
+                const runner = new TextMissionRunner(engine)
+
+                runner.processInput("0, 0")
+                const result = runner.processInput("AE")
+
+                expect(result.text).toContain("Enemy Turn")
+            })
+        })
+    })
 })
