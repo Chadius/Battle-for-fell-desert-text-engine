@@ -12,6 +12,7 @@ import { SquaddieActionInspector} from "./squaddieActionInspector.js"
 import type { SquaddieAction } from "../logic/src/squaddieAction/squaddieAction.js"
 import { ControllableSquaddieInspector } from "./controllableSquaddieInspector.js"
 import { MissionObjectiveInspector } from "./missionObjectiveInspector.js"
+import { buildMovementOverlay, buildRouteOverlay } from "./movementInspector.js"
 
 export const InteractionPhase = {
     BROWSING: "BROWSING",
@@ -34,11 +35,13 @@ export type CommandAction =
     | "lookAtSquaddie"
     | "listControllableSquaddies"
     | "selectAction"
+    | "moveSquaddie"
 
 export interface CommandContext {
     selectedSquaddieId: BattleSquaddieId | undefined
     interactionPhase: TInteractionPhase
     actingSquaddieId: BattleSquaddieId | undefined
+    pendingActionId?: string
 }
 
 export interface CommandResult {
@@ -82,7 +85,10 @@ export const processCommand = (
         return handleShowObjectives(engine)
     }
 
-    // "A" prefix: action selection (e.g., "A" to list, "AE" to end turn)
+    if (context?.interactionPhase === InteractionPhase.SELECTING_TARGET) {
+        return handleMovementTargetSelection(rawInput, engine, context)
+    }
+
     if (normalizedInput.startsWith("A")) {
         return handleSelectAction(normalizedInput, engine, context)
     }
@@ -105,8 +111,8 @@ const handleShowCommands = (context?: CommandContext): CommandResult => {
     ]
 
     if (context?.selectedSquaddieId != undefined) {
-        commandList.push("L - Look at selected squaddie")
-        commandList.push("A - Select action")
+        commandList.push("L - Look at selected squaddie",
+            "A - Select action")
     }
 
     commandList.push("Q - Quit the game", "? - Show all commands")
@@ -184,6 +190,7 @@ const handleInspectCoordinate = (
             selectedSquaddieId: squaddieId,
             interactionPhase: InteractionPhase.BROWSING,
             actingSquaddieId: undefined,
+            pendingActionId: undefined,
         },
     }
 }
@@ -242,9 +249,9 @@ const handleLookAtSquaddie = (
     }
 }
 
-// Map of action key suffixes to action IDs
 const actionKeyMap: Record<string, string> = {
     E: "default-end-turn",
+    M: "default-move",
 }
 
 const handleSelectAction = (
@@ -267,16 +274,17 @@ const handleSelectAction = (
         }
     }
 
-    // "A" alone lists available actions
     if (normalizedInput === "A") {
         return handleListActions(engine, context)
     }
 
-    // "AE" executes End Turn
     const actionSuffix = normalizedInput.substring(1)
     const actionId = actionKeyMap[actionSuffix]
     if (actionId === "default-end-turn") {
         return handleEndTurn(engine, context)
+    }
+    if (actionId === "default-move") {
+        return handleInitiateMovement(engine, context)
     }
 
     return {
@@ -289,16 +297,19 @@ const handleListActions = (
     engine: MissionEngine,
     context: CommandContext
 ): CommandResult => {
+    if (context?.selectedSquaddieId == undefined) {
+        throw new Error("No squaddie was selected.")
+    }
+
     const lines: string[] = ["Select an action:"]
 
-    // Build a reverse map from actionId to key for display
     const actionIdToKey = new Map<string, string>()
     for (const [key, id] of Object.entries(actionKeyMap)) {
         actionIdToKey.set(id, key)
     }
 
     const validity = engine.getSquaddieActionValidity(
-        context.selectedSquaddieId!
+        context.selectedSquaddieId
     )
     for (const validAction of validity.validActions) {
         const key = actionIdToKey.get(validAction.actionId)
@@ -317,14 +328,12 @@ const handleEndTurn = (
     const squaddieId = context.selectedSquaddieId!
     const info = engine.getSquaddieInfo(squaddieId)
 
-    // Ready the End Turn action (self-targeting)
     engine.readyAction({
         actor: squaddieId,
         targets: [squaddieId],
         action: { id: "default-end-turn" },
     })
 
-    // Execute the readied action
     engine.useActionAndGetResults()
 
     return {
@@ -334,6 +343,160 @@ const handleEndTurn = (
             selectedSquaddieId: undefined,
             interactionPhase: InteractionPhase.BROWSING,
             actingSquaddieId: undefined,
+            pendingActionId: undefined,
+        },
+    }
+}
+
+const handleInitiateMovement = (
+    engine: MissionEngine,
+    context: CommandContext
+): CommandResult => {
+    const squaddieId = context.selectedSquaddieId!
+    const info = engine.getSquaddieInfo(squaddieId)
+
+    const movementOptions = engine.getMovementOptionsWithCosts(squaddieId)
+    const tileOverlays = buildMovementOverlay(movementOptions)
+
+    const overview = engine.getMapOverview()
+    const turnNumber = engine.getCurrentTurnNumber()
+    const affiliationTurn = engine.getCurrentAffiliationTurn()
+    const currentAffiliation =
+        MissionTurnService.getSquaddieAffiliationForAffiliationTurn(
+            affiliationTurn
+        )
+    const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
+
+    const renderInfo: MapRenderInfo = {
+        turnNumber,
+        currentAffiliation,
+        squaddieAffiliations,
+        tileOverlays,
+    }
+
+    const mapText = renderMap(overview, renderInfo)
+    const message = `${mapText}\n${info.name}: Select destination (or enter invalid coordinate to cancel):`
+
+    return {
+        action: "moveSquaddie",
+        message,
+        updatedContext: {
+            selectedSquaddieId: squaddieId,
+            interactionPhase: InteractionPhase.SELECTING_TARGET,
+            actingSquaddieId: squaddieId,
+            pendingActionId: "default-move",
+        },
+    }
+}
+
+const handleMovementTargetSelection = (
+    rawInput: string,
+    engine: MissionEngine | undefined,
+    context: CommandContext
+): CommandResult => {
+    if (engine == undefined) {
+        return {
+            action: "moveSquaddie",
+            message: "No engine available to execute movement.",
+            updatedContext: {
+                selectedSquaddieId: undefined,
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+                pendingActionId: undefined,
+            },
+        }
+    }
+
+    const desiredTargetCoordinate = parseCoordinate(rawInput)
+    if (desiredTargetCoordinate == undefined) {
+        return {
+            action: "moveSquaddie",
+            message: "Movement cancelled.",
+            updatedContext: {
+                selectedSquaddieId: undefined,
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+                pendingActionId: undefined,
+            },
+        }
+    }
+
+    const actingSquaddieId = context.actingSquaddieId!
+    const validity = engine.getSquaddieActionValidity(actingSquaddieId)
+    const moveAction = validity.validActions.find(
+        (a) => a.actionId === "default-move"
+    )
+    const isReachable =
+        moveAction?.targetCoordinates.some(
+            (coordinate) =>
+                coordinate.row === desiredTargetCoordinate.row && coordinate.col === desiredTargetCoordinate.col
+        ) ?? false
+
+    if (!isReachable) {
+        return {
+            action: "moveSquaddie",
+            message: `Coordinate (${desiredTargetCoordinate.row},${desiredTargetCoordinate.col}) is out of reach.`,
+            updatedContext: {
+                ...context,
+                interactionPhase: InteractionPhase.SELECTING_TARGET,
+            },
+        }
+    }
+
+    const info = engine.getSquaddieInfo(actingSquaddieId)
+
+    engine.readyAction({
+        actor: actingSquaddieId,
+        targets: [actingSquaddieId],
+        action: {
+            id: "default-move",
+            decisions: { desiredMovementDestination: desiredTargetCoordinate },
+        },
+    })
+
+    const actionResult = engine.useActionAndGetResults()
+
+    const movementResult = Object.values(actionResult.targetResults)
+        .flatMap((target) => target.squaddieActionResults)
+        .find((result) => result.movement != undefined)
+
+    const tileOverlays =
+        movementResult?.movement == undefined
+            ? new Map<string, string>()
+            : buildRouteOverlay(movementResult.movement.expectedPath)
+
+    const overview = engine.getMapOverview()
+    const turnNumber = engine.getCurrentTurnNumber()
+    const affiliationTurn = engine.getCurrentAffiliationTurn()
+    const currentAffiliation =
+        MissionTurnService.getSquaddieAffiliationForAffiliationTurn(
+            affiliationTurn
+        )
+    const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
+
+    const renderInfo: MapRenderInfo = {
+        turnNumber,
+        currentAffiliation,
+        squaddieAffiliations,
+        tileOverlays,
+    }
+
+    const routeMap = renderMap(overview, renderInfo)
+
+    const apSpent = movementResult?.actionPoints?.spent ?? 0
+    const infoAfter = engine.getSquaddieInfo(actingSquaddieId)
+    const apRemaining = infoAfter.currentActionPoints
+
+    const message = `${info.name} moves to (${desiredTargetCoordinate.row}, ${desiredTargetCoordinate.col}), spending ${apSpent} AP (${apRemaining} remaining).\n${routeMap}`
+
+    return {
+        action: "moveSquaddie",
+        message,
+        updatedContext: {
+            selectedSquaddieId: undefined,
+            interactionPhase: InteractionPhase.BROWSING,
+            actingSquaddieId: undefined,
+            pendingActionId: undefined,
         },
     }
 }

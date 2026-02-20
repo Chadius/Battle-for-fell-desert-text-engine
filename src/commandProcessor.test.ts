@@ -610,6 +610,145 @@ describe("processCommand", () => {
         })
     })
 
+    describe("AM — movement command", () => {
+        const setupPlayerTurnWithLini = () => {
+            const engine = new MissionEngineTestHarness()
+            engine.transitionToNextPhase()
+            engine.transitionToNextPhase()
+            const context: CommandContext = {
+                selectedSquaddieId: engine.getLiniSquaddieId(),
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+            }
+            return { engine, context }
+        }
+
+        it("returns error when no squaddie is selected", () => {
+            const engine = new MissionEngineTestHarness()
+            engine.transitionToNextPhase()
+            engine.transitionToNextPhase()
+            const result = processCommand("AM", engine)
+            expect(result.action).toBe("selectAction")
+            expect(result.message).toBe(
+                "No squaddie selected. Inspect a coordinate with a squaddie first."
+            )
+        })
+
+        it("returns moveSquaddie action with AP cost overlay on map when squaddie is selected", () => {
+            const { engine, context } = setupPlayerTurnWithLini()
+            const result = processCommand("AM", engine, context)
+            expect(result.action).toBe("moveSquaddie")
+            expect(result.message).toMatch(/[123]/)
+        })
+
+        it("sets context to SELECTING_TARGET after AM command", () => {
+            const { engine, context } = setupPlayerTurnWithLini()
+            const result = processCommand("AM", engine, context)
+            expect(result.updatedContext?.interactionPhase).toBe(
+                InteractionPhase.SELECTING_TARGET
+            )
+            expect(result.updatedContext?.pendingActionId).toBe("default-move")
+        })
+
+        it("executes movement to a valid reachable coordinate", () => {
+            const { engine, context } = setupPlayerTurnWithLini()
+            const selectResult = processCommand("AM", engine, context)
+            const targetContext = selectResult.updatedContext!
+
+            const moveResult = processCommand("0, 1", engine, targetContext)
+            expect(moveResult.action).toBe("moveSquaddie")
+            expect(moveResult.message).toContain("moves to")
+            expect(moveResult.message).toContain("(0, 1)")
+        })
+
+        it("returns BROWSING context after successful movement", () => {
+            const { engine, context } = setupPlayerTurnWithLini()
+            const selectResult = processCommand("AM", engine, context)
+            const targetContext = selectResult.updatedContext!
+
+            const moveResult = processCommand("0, 1", engine, targetContext)
+            expect(moveResult.updatedContext?.interactionPhase).toBe(
+                InteractionPhase.BROWSING
+            )
+            expect(moveResult.updatedContext?.pendingActionId).toBeUndefined()
+        })
+
+        it("returns out of reach message for unreachable coordinate, keeping SELECTING_TARGET", () => {
+            const { engine, context } = setupPlayerTurnWithLini()
+            const selectResult = processCommand("AM", engine, context)
+            const targetContext = selectResult.updatedContext!
+
+            const moveResult = processCommand("3, 4", engine, targetContext)
+            expect(moveResult.action).toBe("moveSquaddie")
+            expect(moveResult.message).toContain("out of reach")
+            expect(moveResult.updatedContext?.interactionPhase).toBe(
+                InteractionPhase.SELECTING_TARGET
+            )
+        })
+
+        it("cancels movement when malformed input is entered during SELECTING_TARGET", () => {
+            const { engine, context } = setupPlayerTurnWithLini()
+            const selectResult = processCommand("AM", engine, context)
+            const targetContext = selectResult.updatedContext!
+
+            const cancelResult = processCommand("gibberish", engine, targetContext)
+            expect(cancelResult.action).toBe("moveSquaddie")
+            expect(cancelResult.message).toContain("cancelled")
+            expect(cancelResult.updatedContext?.interactionPhase).toBe(
+                InteractionPhase.BROWSING
+            )
+        })
+
+        it("shows movement message with AP spent and remaining after move", () => {
+            const { engine, context } = setupPlayerTurnWithLini()
+            const selectResult = processCommand("AM", engine, context)
+            const targetContext = selectResult.updatedContext!
+
+            const moveResult = processCommand("0, 1", engine, targetContext)
+            expect(moveResult.message).toMatch(/spending [1-9]\d* AP/)
+            expect(moveResult.message).toMatch(/\d+ remaining/)
+            const {currentActionPoints} = engine.getSquaddieInfo(engine.getLiniSquaddieId())
+            expect(currentActionPoints).toBe(2)
+        })
+
+        it("shows movement route with ** and !! after move", () => {
+            const { engine, context } = setupPlayerTurnWithLini()
+            const selectResult = processCommand("AM", engine, context)
+            const targetContext = selectResult.updatedContext!
+
+            const moveResult = processCommand("0, 1", engine, targetContext)
+
+            expect(moveResult.message).toContain("**")
+            expect(moveResult.message).toContain("!!")
+        })
+
+        it("squaddie moves to new position after movement", () => {
+            const { engine, context } = setupPlayerTurnWithLini()
+            const selectResult = processCommand("AM", engine, context)
+            const targetContext = selectResult.updatedContext!
+
+            processCommand("0, 1", engine, targetContext)
+            const liniPos = engine.getSquaddiePosition(engine.getLiniSquaddieId())
+            expect(liniPos).toEqual(expect.objectContaining({ row: 0, col: 1 }))
+        })
+
+        it("movement overlay does not show destinations that cost more AP than available", () => {
+            const { engine, context } = setupPlayerTurnWithLini()
+            const { currentActionPoints } = engine.getSquaddieInfo(engine.getLiniSquaddieId())
+
+            const result = processCommand("AM", engine, context)
+
+            // Extract only the grid lines between "Map: ..." and "Legend:"
+            const lines = result.message.split("\n")
+            const mapHeaderIdx = lines.findIndex(l => l.startsWith("Map:"))
+            const legendIdx = lines.findIndex(l => l.startsWith("Legend:"))
+            const gridText = lines.slice(mapHeaderIdx + 1, legendIdx).join("\n")
+
+            // No tile should display a cost higher than current AP
+            expect(gridText).not.toMatch(new RegExp(`\\b${currentActionPoints + 1}\\b`))
+        })
+    })
+
     describe("showPhase action", () => {
         it("returns showPhase action for P command", () => {
             const engine = new MissionEngineTestHarness()

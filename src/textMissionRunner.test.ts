@@ -46,6 +46,27 @@ describe("TextMissionRunner", () => {
         })
     })
 
+    describe("AM movement integration", () => {
+        it("shows AP cost digits on movement map after AM command", () => {
+            const engine = new MissionEngineTestHarness()
+            const runner = new TextMissionRunner(engine)
+
+            runner.processInput("0, 0")
+            const result = runner.processInput("AM")
+            expect(result.text).toMatch(/[123]/)
+        })
+
+        it("shows moves to message and route map after entering a valid destination", () => {
+            const engine = new MissionEngineTestHarness()
+            const runner = new TextMissionRunner(engine)
+
+            runner.processInput("0, 0")
+            runner.processInput("AM")
+            const result = runner.processInput("0, 1")
+            expect(result.text).toContain("moves to")
+        })
+    })
+
     describe("phase announcements", () => {
         describe("getWelcomeText", () => {
             it("contains the turn start announcement for the initial turn", () => {

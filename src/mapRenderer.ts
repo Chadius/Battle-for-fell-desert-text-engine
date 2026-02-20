@@ -9,6 +9,7 @@ export interface MapRenderInfo {
     currentAffiliation: TSquaddieAffiliation | undefined
     squaddieAffiliations: Map<string, TSquaddieAffiliation>
     objectivesDisplay?: string
+    tileOverlays?: Map<string, string>
 }
 
 export const affiliationDisplayName = (
@@ -95,17 +96,21 @@ const assignDisambiguatedLabels = (
 
 const renderGridLines = (
     overview: MapOverview,
-    squaddieLabels: Map<string, string>
+    squaddieLabels: Map<string, string>,
+    renderInfo?: MapRenderInfo
 ): string[] => {
     const lines: string[] = []
 
     for (let row = 0; row < overview.height; row++) {
         const indent = row % 2 === 1 ? " " : ""
         const tileCells = overview.tiles[row].map((tile) => {
+            const overlayKey = `${tile.row},${tile.col}`
+            const overlayChar = renderInfo?.tileOverlays?.get(overlayKey)
+            if (overlayChar != undefined) {
+                return overlayChar
+            }
             if (tile.squaddieId != undefined) {
-                return squaddieLabels.get(
-                    tile.squaddieId.outOfBattleSquaddieId
-                )!
+                return squaddieLabels.get(tile.squaddieId.outOfBattleSquaddieId)!
             }
             return terrainToSymbol(tile.movementCost, tile.canStop)
         })
@@ -225,7 +230,7 @@ export const renderMap = (
     }
 
     const header = `Map: ${overview.width} columns x ${overview.height} rows`
-    const gridLines = renderGridLines(overview, squaddieLabels)
+    const gridLines = renderGridLines(overview, squaddieLabels, renderInfo)
     const legend = renderLegend()
     const squaddieList = renderSquaddieList(overview, squaddieLabels, renderInfo)
 

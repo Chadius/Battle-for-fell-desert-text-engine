@@ -26,6 +26,7 @@ export class TextMissionRunner {
             selectedSquaddieId: undefined,
             interactionPhase: InteractionPhase.BROWSING,
             actingSquaddieId: undefined,
+            pendingActionId: undefined,
         }
         this.initialPhaseMessages = this.advanceToInteractivePhase()
     }
