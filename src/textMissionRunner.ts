@@ -10,6 +10,8 @@ import {
     type TMissionAffiliationTurn,
 } from "../logic/src/mission/missionTurn.js"
 
+const MAX_PHASE_TRANSITIONS = 20
+
 export interface ProcessInputResult {
     text: string
     shouldQuit: boolean
@@ -19,6 +21,8 @@ export class TextMissionRunner {
     private readonly engine: MissionEngine
     private context: CommandContext
     private readonly initialPhaseMessages: string[]
+    private lastKnownInteractivePhase: TMissionAffiliationTurn | undefined =
+        undefined
 
     constructor(engine: MissionEngine) {
         this.engine = engine
@@ -98,15 +102,39 @@ export class TextMissionRunner {
     }
 
     private advanceToInteractivePhase(): string[] {
+        const currentPhase = this.engine.getCurrentAffiliationTurn()
+        if (this.isInteractivePhase(currentPhase)) {
+            return this.announceRecentTransitions(currentPhase)
+        }
+        return this.advanceToInteractivePhaseManually()
+    }
+
+    private announceRecentTransitions(
+        currentPhase: TMissionAffiliationTurn
+    ): string[] {
+        if (currentPhase === this.lastKnownInteractivePhase) {
+            return []
+        }
+        const { recentPhaseTransitions } =
+            this.engine.getInMissionSummary()
+        const messages = recentPhaseTransitions
+            .map((phase) => this.announcePhase(phase))
+            .filter((msg): msg is string => msg != undefined)
+        this.lastKnownInteractivePhase = currentPhase
+        return messages
+    }
+
+    private advanceToInteractivePhaseManually(): string[] {
         const messages: string[] = []
 
-        const currentPhase = this.engine.getCurrentAffiliationTurn()
-        const currentAnnouncement = this.announcePhase(currentPhase)
+        const currentAnnouncement = this.announcePhase(
+            this.engine.getCurrentAffiliationTurn()
+        )
         if (currentAnnouncement != undefined) {
             messages.push(currentAnnouncement)
         }
 
-        let phaseChangeLimit = 20
+        let phaseChangeLimit = MAX_PHASE_TRANSITIONS
         while (phaseChangeLimit > 0) {
             const phaseBefore = this.engine.getCurrentAffiliationTurn()
             this.engine.transitionToNextPhase()
@@ -122,6 +150,7 @@ export class TextMissionRunner {
             }
 
             if (this.isInteractivePhase(phaseAfter)) {
+                this.lastKnownInteractivePhase = phaseAfter
                 break
             }
             phaseChangeLimit -= 1

@@ -1,4 +1,9 @@
+@SPEC.md
+
 # Overview
+
+See `SPEC.md` for the full technical specification, current capabilities, known gaps, and the
+phased implementation plan.
 
 This project is a text-based engine to play a turn based strategy game called The Battle of Fell Desert.
 

@@ -328,13 +328,7 @@ const handleEndTurn = (
     const squaddieId = context.selectedSquaddieId!
     const info = engine.getSquaddieInfo(squaddieId)
 
-    engine.readyAction({
-        actor: squaddieId,
-        targets: [squaddieId],
-        action: { id: "default-end-turn" },
-    })
-
-    engine.useActionAndGetResults()
+    engine.endSquaddieTurn(squaddieId)
 
     return {
         action: "selectAction",
