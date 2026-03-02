@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest"
 import { TextMissionRunner } from "./textMissionRunner.js"
 import { MissionEngineTestHarness } from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
+import {
+    SquaddieConditionDecaysAt,
+    SquaddieConditionService,
+    SquaddieConditionType,
+} from "../logic/src/proficiency/squaddieCondition.js"
 
 describe("TextMissionRunner", () => {
     describe("getWelcomeText", () => {
@@ -64,6 +69,37 @@ describe("TextMissionRunner", () => {
             runner.processInput("AM")
             const result = runner.processInput("0, 1")
             expect(result.text).toContain("moves to")
+        })
+    })
+
+    describe("condition expiration messages", () => {
+        it("announces when a TURN_END condition expires after ending the squaddie turn", () => {
+            const engine = new MissionEngineTestHarness()
+            const runner = new TextMissionRunner(engine)
+
+            const liniId = engine.getLiniSquaddieId()
+            engine.missionManager!.inBattleSquaddieManager!.addConditionsToSquaddie(
+                {
+                    ...liniId,
+                    conditions: [
+                        SquaddieConditionService.new({
+                            type: SquaddieConditionType.ARMOR,
+                            amount: 2,
+                            duration: {
+                                duration: 1,
+                                decaysAt: SquaddieConditionDecaysAt.TURN_END,
+                            },
+                        }),
+                    ],
+                }
+            )
+
+            runner.processInput("0, 0")
+            const result = runner.processInput("AE")
+
+            expect(result.text).toContain("Lini")
+            expect(result.text).toContain("Armor")
+            expect(result.text).toContain("expired")
         })
     })
 

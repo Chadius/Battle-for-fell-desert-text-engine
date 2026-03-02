@@ -1,10 +1,12 @@
 import type { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
+import type { SerializedSquaddieActionResult } from "../logic/src/squaddieAction/calculate/result/squaddieActionResult.js"
 import {
     processCommand,
     InteractionPhase,
 } from "./commandProcessor.js"
 import type { CommandContext } from "./commandProcessor.js"
 import { MissionObjectiveInspector } from "./missionObjectiveInspector.js"
+import { conditionTypeName } from "./squaddieDetailInspector.js"
 import {
     MissionAffiliationTurn,
     type TMissionAffiliationTurn,
@@ -120,6 +122,13 @@ export class TextMissionRunner {
         const messages = recentPhaseTransitions
             .map((phase) => this.announcePhase(phase))
             .filter((msg): msg is string => msg != undefined)
+
+        messages.push(
+            ...this.formatConditionExpirationMessages(
+                this.engine.getRecentTransitionResults()
+            )
+        )
+
         this.lastKnownInteractivePhase = currentPhase
         return messages
     }
@@ -137,7 +146,8 @@ export class TextMissionRunner {
         let phaseChangeLimit = MAX_PHASE_TRANSITIONS
         while (phaseChangeLimit > 0) {
             const phaseBefore = this.engine.getCurrentAffiliationTurn()
-            this.engine.transitionToNextPhase()
+            const transitionResults = this.engine.transitionToNextPhase()
+            messages.push(...this.formatConditionExpirationMessages(transitionResults))
             const phaseAfter = this.engine.getCurrentAffiliationTurn()
 
             if (phaseAfter === phaseBefore) {
@@ -160,6 +170,26 @@ export class TextMissionRunner {
             throw new Error("Changed phases too many times, possible infinite loop")
         }
 
+        return messages
+    }
+
+    private formatConditionExpirationMessages(
+        results: SerializedSquaddieActionResult[]
+    ): string[] {
+        const messages: string[] = []
+        for (const result of results) {
+            const types = result.dispel?.conditionTypes.types
+            if (!types || types.length === 0) continue
+
+            const info = this.engine.getSquaddieInfo({
+                inBattleSquaddieId: result.inBattleSquaddieId,
+                outOfBattleSquaddieId: result.outOfBattleSquaddieId,
+            })
+            const name = info?.name ?? result.outOfBattleSquaddieId
+            for (const conditionType of types) {
+                messages.push(`${name}'s ${conditionTypeName(conditionType)} expired`)
+            }
+        }
         return messages
     }
 }
