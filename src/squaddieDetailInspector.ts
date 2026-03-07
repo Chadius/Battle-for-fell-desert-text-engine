@@ -21,11 +21,11 @@ export const formatCondition = (condition: SquaddieCondition): string => {
     let result = conditionTypeName(condition.type)
 
     if (condition.amount != undefined) {
-        result += `: ${condition.amount}`
+        result += `: ${condition.amount.current}`
     }
 
     if (condition.limit.duration != undefined) {
-        result += ` (${condition.limit.duration} turns remaining)`
+        result += ` (${condition.limit.duration.duration} turns remaining)`
     }
 
     return result

@@ -738,14 +738,49 @@ describe("processCommand", () => {
 
             const result = processCommand("AM", engine, context)
 
-            // Extract only the grid lines between "Map: ..." and "Legend:"
             const lines = result.message.split("\n")
             const mapHeaderIdx = lines.findIndex(l => l.startsWith("Map:"))
             const legendIdx = lines.findIndex(l => l.startsWith("Legend:"))
             const gridText = lines.slice(mapHeaderIdx + 1, legendIdx).join("\n")
 
-            // No tile should display a cost higher than current AP
             expect(gridText).not.toMatch(new RegExp(`\\b${currentActionPoints + 1}\\b`))
+        })
+
+        it("shows the engine rejection message and returns to BROWSING when readyAction is invalid", () => {
+            const engine = new MissionEngineTestHarness()
+            engine.transitionToNextPhase()
+            engine.transitionToNextPhase()
+
+            const slitherDemonId = engine.getSlitherDemonSquaddieId()
+            const validity = engine.getSquaddieActionValidity(slitherDemonId)
+            const moveAction = validity.validActions.find(
+                (a) => a.actionId === "default-move"
+            )
+
+            const targetCoord = moveAction?.targetCoordinates[0]
+            expect(targetCoord).toBeDefined()
+            if (!targetCoord) return
+
+            const context: CommandContext = {
+                selectedSquaddieId: slitherDemonId,
+                interactionPhase: InteractionPhase.SELECTING_TARGET,
+                actingSquaddieId: slitherDemonId,
+                pendingActionId: "default-move",
+            }
+
+            const result = processCommand(
+                `${targetCoord.row}, ${targetCoord.col}`,
+                engine,
+                context
+            )
+
+            expect(result.message).toContain("It is not this squaddie's turn")
+            expect(result.updatedContext?.interactionPhase).toBe(
+                InteractionPhase.BROWSING
+            )
+
+            const slitherPos = engine.getSquaddiePosition(slitherDemonId)
+            expect(slitherPos).toEqual(expect.objectContaining({ row: 3, col: 4 }))
         })
     })
 

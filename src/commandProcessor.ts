@@ -439,7 +439,7 @@ const handleMovementTargetSelection = (
 
     const info = engine.getSquaddieInfo(actingSquaddieId)
 
-    engine.readyAction({
+    const readyResult = engine.readyAction({
         actor: actingSquaddieId,
         targets: [actingSquaddieId],
         action: {
@@ -447,6 +447,19 @@ const handleMovementTargetSelection = (
             decisions: { desiredMovementDestination: desiredTargetCoordinate },
         },
     })
+
+    if (!readyResult.isValid) {
+        return {
+            action: "moveSquaddie",
+            message: readyResult.message ?? "Cannot perform this action.",
+            updatedContext: {
+                selectedSquaddieId: undefined,
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+                pendingActionId: undefined,
+            },
+        }
+    }
 
     const actionResult = engine.useActionAndGetResults()
 

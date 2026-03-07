@@ -4,7 +4,12 @@ import {
     formatCondition,
     formatSquaddieDetails,
 } from "./squaddieDetailInspector.js"
-import { SquaddieConditionService, SquaddieConditionType } from "../logic/src/proficiency/squaddieCondition.js"
+import {
+    SquaddieConditionDecaysAt,
+    SquaddieConditionService,
+    SquaddieConditionSource,
+    SquaddieConditionType,
+} from "../logic/src/proficiency/squaddieCondition.js"
 import type { SquaddieCondition } from "../logic/src/proficiency/squaddieCondition.js"
 
 describe("squaddieDetailInspector", () => {
@@ -39,7 +44,8 @@ describe("squaddieDetailInspector", () => {
             const condition = SquaddieConditionService.new({
                 type: SquaddieConditionType.ARMOR,
                 amount: 3,
-                duration: 2,
+                duration: { duration: 2, decaysAt: SquaddieConditionDecaysAt.TURN_END },
+                source: SquaddieConditionSource.UNKNOWN,
             })
             expect(formatCondition(condition)).toBe("Armor: 3 (2 turns remaining)")
         })
@@ -49,6 +55,7 @@ describe("squaddieDetailInspector", () => {
                 type: SquaddieConditionType.SLOWED,
                 amount: 1,
                 duration: undefined,
+                source: SquaddieConditionSource.UNKNOWN,
             })
             expect(formatCondition(condition)).toBe("Slowed: 1")
         })
@@ -57,7 +64,8 @@ describe("squaddieDetailInspector", () => {
             const condition = SquaddieConditionService.new({
                 type: SquaddieConditionType.ELUSIVE,
                 amount: undefined,
-                duration: 2,
+                duration: { duration: 2, decaysAt: SquaddieConditionDecaysAt.TURN_END },
+                source: SquaddieConditionSource.UNKNOWN,
             })
             expect(formatCondition(condition)).toBe("Elusive (2 turns remaining)")
         })
@@ -67,6 +75,7 @@ describe("squaddieDetailInspector", () => {
                 type: SquaddieConditionType.HUSTLE,
                 amount: undefined,
                 duration: undefined,
+                source: SquaddieConditionSource.UNKNOWN,
             })
             expect(formatCondition(condition)).toBe("Hustle")
         })
@@ -75,7 +84,8 @@ describe("squaddieDetailInspector", () => {
             const condition = SquaddieConditionService.new({
                 type: SquaddieConditionType.ABSORB,
                 amount: 5,
-                duration: 3,
+                duration: { duration: 3, decaysAt: SquaddieConditionDecaysAt.TURN_END },
+                source: SquaddieConditionSource.UNKNOWN,
             })
             expect(formatCondition(condition)).toBe("Absorb: 5 (3 turns remaining)")
         })
@@ -92,7 +102,8 @@ describe("squaddieDetailInspector", () => {
                 SquaddieConditionService.new({
                     type: SquaddieConditionType.ARMOR,
                     amount: 2,
-                    duration: 3,
+                    duration: { duration: 3, decaysAt: SquaddieConditionDecaysAt.TURN_END },
+                    source: SquaddieConditionSource.UNKNOWN,
                 }),
             ]
             const result = formatSquaddieDetails(conditions)
@@ -104,17 +115,20 @@ describe("squaddieDetailInspector", () => {
                 SquaddieConditionService.new({
                     type: SquaddieConditionType.ARMOR,
                     amount: 2,
-                    duration: 3,
+                    duration: { duration: 3, decaysAt: SquaddieConditionDecaysAt.TURN_END },
+                    source: SquaddieConditionSource.UNKNOWN,
                 }),
                 SquaddieConditionService.new({
                     type: SquaddieConditionType.ELUSIVE,
                     amount: undefined,
                     duration: undefined,
+                    source: SquaddieConditionSource.UNKNOWN,
                 }),
                 SquaddieConditionService.new({
                     type: SquaddieConditionType.SLOWED,
                     amount: 1,
                     duration: undefined,
+                    source: SquaddieConditionSource.UNKNOWN,
                 }),
             ]
             const result = formatSquaddieDetails(conditions)
