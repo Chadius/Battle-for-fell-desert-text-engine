@@ -11,6 +11,8 @@ import {
     MissionAffiliationTurn,
     type TMissionAffiliationTurn,
 } from "../logic/src/mission/missionTurn.js"
+import {MissionObjectiveRewardType, TMissionObjectiveRewardType} from "../logic/src/mission/missionObjectiveReward.js"
+import type { MissionObjective } from "../logic/src/mission/missionObjective.js"
 
 const MAX_PHASE_TRANSITIONS = 20
 
@@ -66,14 +68,91 @@ export class TextMissionRunner {
         }
 
         const phaseMessages = this.advanceToInteractivePhase()
+        this.giveNonTerminalObjectiveRewards()
+
         const allText = [result.message, ...phaseMessages]
             .filter((s) => s.length > 0)
             .join("\n")
 
-        return {
-            text: allText,
-            shouldQuit: result.action === "quit",
+        if (result.action === "quit") {
+            return { text: allText, shouldQuit: true }
         }
+
+        // If mission was already ended by a previous processInput call (rewards already
+        // marked), re-surface the summary so the caller always sees it regardless of
+        // which input happened to trigger the final detection.
+        if (this.engine.isDone()) {
+            const rewarded = this.engine.getCompletedAndRewardedMissionObjectives()
+            const summaryText = this.formatMissionSummary(rewarded)
+            return {
+                text: [allText, summaryText].filter((s) => s.length > 0).join("\n"),
+                shouldQuit: true,
+            }
+        }
+
+        const terminalObjectives = this.getPendingTerminalObjectives()
+        if (terminalObjectives.length > 0) {
+            const summaryText = this.formatMissionSummary(terminalObjectives)
+            for (const objective of terminalObjectives) {
+                this.engine.markMissionObjectiveAsRewarded(objective.id)
+            }
+            return {
+                text: [allText, summaryText].filter((s) => s.length > 0).join("\n"),
+                shouldQuit: true,
+            }
+        }
+
+        return { text: allText, shouldQuit: false }
+    }
+
+    private giveNonTerminalObjectiveRewards(): void {
+        const terminalTypes: Set<TMissionObjectiveRewardType> = new Set([
+            MissionObjectiveRewardType.MISSION_ENDS,
+            MissionObjectiveRewardType.MISSION_FAILURE,
+        ])
+        const completed = this.engine.getCompletedButNotRewardedMissionObjectives()
+        for (const objective of completed) {
+            const isTerminal = objective.rewards.some((r) =>
+                terminalTypes.has(r.type)
+            )
+            if (!isTerminal) {
+                this.engine.markMissionObjectiveAsRewarded(objective.id)
+            }
+        }
+    }
+
+    private getPendingTerminalObjectives(): MissionObjective[] {
+        const terminalTypes: Set<TMissionObjectiveRewardType> = new Set([
+            MissionObjectiveRewardType.MISSION_ENDS,
+            MissionObjectiveRewardType.MISSION_FAILURE,
+        ])
+        return this.engine
+            .getCompletedButNotRewardedMissionObjectives()
+            .filter((obj) => obj.rewards.some((r) => terminalTypes.has(r.type)))
+    }
+
+    private formatMissionSummary(terminalObjectives: MissionObjective[]): string {
+        const lines: string[] = []
+
+        const isFailure = terminalObjectives.some((obj) =>
+            obj.rewards.some(
+                (reward) => reward.type === MissionObjectiveRewardType.MISSION_FAILURE
+            )
+        )
+        lines.push(
+            isFailure ? "Mission Failed!" : "Mission Complete!",
+            `Completed on turn ${this.engine.getCurrentTurnNumber()}.`
+        )
+
+        const survivors = this.engine
+            .getAllSquaddiePositions()
+            .map(({ squaddieId }) => this.engine.getSquaddieInfo(squaddieId))
+            .filter((info) => info != undefined && info.currentHitPoints > 0)
+        if (survivors.length > 0) {
+            lines.push(`Survivors: ${survivors.map((s) => s.name).join(", ")}`)
+        }
+
+        return lines.join("\n")
     }
 
     private announcePhase(phase: TMissionAffiliationTurn): string | undefined {

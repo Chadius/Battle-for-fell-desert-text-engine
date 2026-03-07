@@ -156,7 +156,7 @@ completeness:
 The goal: a human can sit down at the terminal and play the test harness mission to completion —
 moving, attacking, seeing results, watching enemies act, and receiving a win or loss message.
 
-### Phase 1 — Mission Completion Detection
+### Phase 1 — Mission Completion Detection (DONE)
 
 **Goal:** The game ends when objectives are met, instead of running forever.
 

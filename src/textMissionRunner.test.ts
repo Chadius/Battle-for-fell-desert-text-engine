@@ -4,6 +4,7 @@ import { MissionEngineTestHarness } from "../logic/src/testUtils/mission/mission
 import {
     SquaddieConditionDecaysAt,
     SquaddieConditionService,
+    SquaddieConditionSource,
     SquaddieConditionType,
 } from "../logic/src/proficiency/squaddieCondition.js"
 
@@ -89,6 +90,7 @@ describe("TextMissionRunner", () => {
                                 duration: 1,
                                 decaysAt: SquaddieConditionDecaysAt.TURN_END,
                             },
+                            source: SquaddieConditionSource.SPIRITUAL,
                         }),
                     ],
                 }
@@ -100,6 +102,42 @@ describe("TextMissionRunner", () => {
             expect(result.text).toContain("Lini")
             expect(result.text).toContain("Armor")
             expect(result.text).toContain("expired")
+        })
+    })
+
+    describe("mission completion", () => {
+        it("returns shouldQuit true with Mission Complete when all enemies are defeated", () => {
+            const engine = new MissionEngineTestHarness()
+            const runner = new TextMissionRunner(engine)
+
+            const slitherDemonId = engine.getSlitherDemonSquaddieId()
+            engine.missionManager!.inBattleSquaddieManager!.dealDamageToSquaddie({
+                ...slitherDemonId,
+                damage: { amount: 100, type: undefined },
+            })
+
+            runner.processInput("0, 0")
+            const result = runner.processInput("AE")
+
+            expect(result.shouldQuit).toBe(true)
+            expect(result.text).toContain("Mission Complete!")
+        })
+
+        it("includes turn number and survivor name in the mission summary", () => {
+            const engine = new MissionEngineTestHarness()
+            const runner = new TextMissionRunner(engine)
+
+            const slitherDemonId = engine.getSlitherDemonSquaddieId()
+            engine.missionManager!.inBattleSquaddieManager!.dealDamageToSquaddie({
+                ...slitherDemonId,
+                damage: { amount: 100, type: undefined },
+            })
+
+            runner.processInput("0, 0")
+            const result = runner.processInput("AE")
+
+            expect(result.text).toContain("turn")
+            expect(result.text).toContain("Lini")
         })
     })
 
