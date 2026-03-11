@@ -1,7 +1,7 @@
 import type { OffsetCoordinate } from "../logic/src/coordinateMap/offsetCoordinate.js"
 import type { CoordinateMovePath } from "../logic/src/coordinateMap/path/path.js"
 
-export const buildMovementOverlay = (
+const buildMovementOverlay = (
     movementOptions: Array<{
         destination: OffsetCoordinate
         actionPointCost: number
@@ -17,7 +17,18 @@ export const buildMovementOverlay = (
     return overlay
 }
 
-export const buildRouteOverlay = (
+const buildTargetOverlay = (
+    targetCoordinates: OffsetCoordinate[]
+): Map<string, string> => {
+    const overlay = new Map<string, string>()
+    for (const targetCoordinate of targetCoordinates) {
+        const key = `${targetCoordinate.row},${targetCoordinate.col}`
+        overlay.set(key, "TG")
+    }
+    return overlay
+}
+
+const buildRouteOverlay = (
     path: CoordinateMovePath
 ): Map<string, string> => {
     const overlay = new Map<string, string>()
@@ -29,4 +40,10 @@ export const buildRouteOverlay = (
     })
 
     return overlay
+}
+
+export const MovementInspector = {
+    buildMovementOverlay,
+    buildTargetOverlay,
+    buildRouteOverlay,
 }

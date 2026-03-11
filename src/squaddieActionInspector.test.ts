@@ -205,4 +205,261 @@ describe("squaddieActionInspector", () => {
             expect(result).toContain("Move")
         })
     })
+
+    describe("buildCombatActionIndex", () => {
+        const emptyBattleSquaddieId = {
+            inBattleSquaddieId: 0,
+            outOfBattleSquaddieId: "test",
+        }
+
+        it("excludes default-move and default-end-turn from the index", () => {
+            const validity: SquaddieActionValidity = {
+                battleSquaddieId: emptyBattleSquaddieId,
+                validActions: [
+                    {
+                        actionId: "default-move",
+                        actionName: "Move",
+                        targetCoordinates: [],
+                        targetBattleSquaddieIds: [],
+                    },
+                    {
+                        actionId: "default-end-turn",
+                        actionName: "End Turn",
+                        targetCoordinates: [],
+                        targetBattleSquaddieIds: [],
+                    },
+                    {
+                        actionId: "attack",
+                        actionName: "Attack",
+                        targetCoordinates: [],
+                        targetBattleSquaddieIds: [],
+                    },
+                ],
+                invalidActions: [],
+            }
+
+            const index = SquaddieActionInspector.buildCombatActionIndex(validity)
+            expect(index).not.toContain("default-move")
+            expect(index).not.toContain("default-end-turn")
+            expect(index).toContain("attack")
+        })
+
+        it("assigns the same number to an action whether it is valid or invalid", () => {
+            const validValidity: SquaddieActionValidity = {
+                battleSquaddieId: emptyBattleSquaddieId,
+                validActions: [
+                    {
+                        actionId: "attack",
+                        actionName: "Attack",
+                        targetCoordinates: [],
+                        targetBattleSquaddieIds: [],
+                    },
+                ],
+                invalidActions: [
+                    {actionId: "heal", actionName: "Heal", reason: "No allies"},
+                ],
+            }
+
+            const invalidValidity: SquaddieActionValidity = {
+                battleSquaddieId: emptyBattleSquaddieId,
+                validActions: [],
+                invalidActions: [
+                    {
+                        actionId: "attack",
+                        actionName: "Attack",
+                        reason: "No enemies",
+                    },
+                    {actionId: "heal", actionName: "Heal", reason: "No allies"},
+                ],
+            }
+
+            const validIndex =
+                SquaddieActionInspector.buildCombatActionIndex(validValidity)
+            const invalidIndex =
+                SquaddieActionInspector.buildCombatActionIndex(invalidValidity)
+
+            expect(validIndex).toEqual(invalidIndex)
+            expect(validIndex.indexOf("attack")).toBe(
+                invalidIndex.indexOf("attack")
+            )
+        })
+
+        it("returns actions in alphabetical order", () => {
+            const validity: SquaddieActionValidity = {
+                battleSquaddieId: emptyBattleSquaddieId,
+                validActions: [
+                    {
+                        actionId: "zebra-action",
+                        actionName: "Zebra",
+                        targetCoordinates: [],
+                        targetBattleSquaddieIds: [],
+                    },
+                    {
+                        actionId: "apple-action",
+                        actionName: "Apple",
+                        targetCoordinates: [],
+                        targetBattleSquaddieIds: [],
+                    },
+                ],
+                invalidActions: [],
+            }
+
+            const index = SquaddieActionInspector.buildCombatActionIndex(validity)
+            expect(index[0]).toBe("apple-action")
+            expect(index[1]).toBe("zebra-action")
+        })
+    })
+
+    describe("formatSquaddieActionsWithKeys", () => {
+        const emptyBattleSquaddieId = {
+            inBattleSquaddieId: 0,
+            outOfBattleSquaddieId: "test",
+        }
+
+        it("shows A1 and A2 for two combat actions in alphabetical order", () => {
+            const healAction = SquaddieActionService.new({
+                id: "heal",
+                name: "Heal",
+                effectOnActor: {
+                    [DegreeOfSuccess.SUCCESS]: {actionPoints: {spent: 2}},
+                },
+            })
+            const attackAction = SquaddieActionService.new({
+                id: "attack",
+                name: "Attack",
+                effectOnActor: {
+                    [DegreeOfSuccess.SUCCESS]: {actionPoints: {spent: 1}},
+                },
+            })
+
+            const validity: SquaddieActionValidity = {
+                battleSquaddieId: emptyBattleSquaddieId,
+                validActions: [
+                    {
+                        actionId: "heal",
+                        actionName: "Heal",
+                        targetCoordinates: [],
+                        targetBattleSquaddieIds: [],
+                    },
+                    {
+                        actionId: "attack",
+                        actionName: "Attack",
+                        targetCoordinates: [],
+                        targetBattleSquaddieIds: [],
+                    },
+                ],
+                invalidActions: [],
+            }
+
+            const actionsById = new Map<string, SquaddieAction>()
+            actionsById.set("heal", healAction)
+            actionsById.set("attack", attackAction)
+
+            const result = SquaddieActionInspector.formatSquaddieActionsWithKeys(
+                validity,
+                actionsById
+            )
+
+            expect(result).toContain("A1 - Attack")
+            expect(result).toContain("A2 - Heal")
+        })
+
+        it("shows AE for End Turn and AM for Move", () => {
+            const endTurnAction = SquaddieActionService.defaultEndTurn()
+            const moveAction = SquaddieActionService.defaultMove()
+
+            const validity: SquaddieActionValidity = {
+                battleSquaddieId: emptyBattleSquaddieId,
+                validActions: [
+                    {
+                        actionId: "default-end-turn",
+                        actionName: "End Turn",
+                        targetCoordinates: [],
+                        targetBattleSquaddieIds: [],
+                    },
+                    {
+                        actionId: "default-move",
+                        actionName: "Move",
+                        targetCoordinates: [],
+                        targetBattleSquaddieIds: [],
+                    },
+                ],
+                invalidActions: [],
+            }
+
+            const actionsById = new Map<string, SquaddieAction>()
+            actionsById.set("default-end-turn", endTurnAction)
+            actionsById.set("default-move", moveAction)
+
+            const result = SquaddieActionInspector.formatSquaddieActionsWithKeys(
+                validity,
+                actionsById
+            )
+            expect(result).toContain("AE - End Turn")
+            expect(result).toContain("AM - Move")
+        })
+
+        it("shows invalid actions inline with reason in brackets", () => {
+            const attackAction = SquaddieActionService.new({
+                id: "attack",
+                name: "Attack",
+                effectOnActor: {
+                    [DegreeOfSuccess.SUCCESS]: {actionPoints: {spent: 1}},
+                },
+            })
+
+            const validity: SquaddieActionValidity = {
+                battleSquaddieId: emptyBattleSquaddieId,
+                validActions: [],
+                invalidActions: [
+                    {
+                        actionId: "attack",
+                        actionName: "Attack",
+                        reason: "No enemies in range",
+                    },
+                ],
+            }
+
+            const actionsById = new Map<string, SquaddieAction>()
+            actionsById.set("attack", attackAction)
+
+            const result = SquaddieActionInspector.formatSquaddieActionsWithKeys(
+                validity,
+                actionsById
+            )
+            expect(result).toContain("A1 - Attack")
+            expect(result).toContain("[No enemies in range]")
+        })
+
+        it("uses the test harness engine to show Lini's actions with A1/A2 keys", () => {
+            const engine = new MissionEngineTestHarness()
+            const liniId = engine.getLiniSquaddieId()
+            const validity = engine.getSquaddieActionValidity(liniId)
+
+            const actionsById = new Map<string, SquaddieAction>()
+            for (const action of [
+                ...validity.validActions,
+                ...validity.invalidActions,
+            ]) {
+                actionsById.set(
+                    action.actionId,
+                    engine.getActionById(action.actionId)
+                )
+            }
+
+            const result = SquaddieActionInspector.formatSquaddieActionsWithKeys(
+                validity,
+                actionsById
+            )
+
+            expect(result).toContain(
+                `A1 - Heal`
+            )
+            expect(result).toContain(
+                `A2 - Scimitar`
+            )
+            expect(result).toContain("AE - End Turn")
+            expect(result).toContain("AM - Move")
+        })
+    })
 })

@@ -1,18 +1,18 @@
-import type { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
-import type { BattleSquaddieId } from "../logic/src/squaddie/inBattle/inBattleSquaddieManager.js"
-import {
-    MissionTurnService,
-    type TMissionAffiliationTurn,
-} from "../logic/src/mission/missionTurn.js"
-import type { TSquaddieAffiliation } from "../logic/src/affiliation/affiliation.js"
-import { renderMap, type MapRenderInfo } from "./mapRenderer.js"
-import { parseCoordinate, inspectCoordinate } from "./coordinateInspector.js"
-import { formatSquaddieDetails } from "./squaddieDetailInspector.js"
-import { SquaddieActionInspector} from "./squaddieActionInspector.js"
-import type { SquaddieAction } from "../logic/src/squaddieAction/squaddieAction.js"
-import { ControllableSquaddieInspector } from "./controllableSquaddieInspector.js"
-import { MissionObjectiveInspector } from "./missionObjectiveInspector.js"
-import { buildMovementOverlay, buildRouteOverlay } from "./movementInspector.js"
+import type {MissionEngine} from "../logic/src/mission/missionEngine/missionEngine.js"
+import type {BattleSquaddieId} from "../logic/src/squaddie/inBattle/inBattleSquaddieManager.js"
+import {MissionTurnService, type TMissionAffiliationTurn,} from "../logic/src/mission/missionTurn.js"
+import type {TSquaddieAffiliation} from "../logic/src/affiliation/affiliation.js"
+import {type MapRenderInfo, renderMap} from "./mapRenderer.js"
+import {inspectCoordinate, parseCoordinate} from "./coordinateInspector.js"
+import {formatSquaddieDetails} from "./squaddieDetailInspector.js"
+import {SquaddieActionInspector} from "./squaddieActionInspector.js"
+import type {SquaddieAction} from "../logic/src/squaddieAction/squaddieAction.js"
+import {ControllableSquaddieInspector} from "./controllableSquaddieInspector.js"
+import {MissionObjectiveInspector} from "./missionObjectiveInspector.js"
+import {MovementInspector,} from "./movementInspector.js"
+import {ActionResultInspector} from "./actionResultInspector.js"
+import {OffsetCoordinate} from "../logic/src/coordinateMap/offsetCoordinate.js";
+import {ValidSquaddieAction} from "../logic/src/squaddieAction/calculate/validity/squaddieActionValidationService.js";
 
 export const InteractionPhase = {
     BROWSING: "BROWSING",
@@ -36,12 +36,15 @@ export type CommandAction =
     | "listControllableSquaddies"
     | "selectAction"
     | "moveSquaddie"
+    | "executeAction"
+    | "cancelAction"
 
 export interface CommandContext {
     selectedSquaddieId: BattleSquaddieId | undefined
     interactionPhase: TInteractionPhase
     actingSquaddieId: BattleSquaddieId | undefined
     pendingActionId?: string
+    pendingTargetCount?: number
 }
 
 export interface CommandResult {
@@ -85,8 +88,15 @@ export const processCommand = (
         return handleShowObjectives(engine)
     }
 
+    if (context?.interactionPhase === InteractionPhase.CONFIRMING_ACTION) {
+        return handleActionConfirmation(normalizedInput, engine, context)
+    }
+
     if (context?.interactionPhase === InteractionPhase.SELECTING_TARGET) {
-        return handleMovementTargetSelection(rawInput, engine, context)
+        if (context.pendingActionId === "default-move") {
+            return handleMovementTargetSelection(rawInput, engine, context)
+        }
+        return handleCombatActionTargetSelection(rawInput, engine, context)
     }
 
     if (normalizedInput.startsWith("A")) {
@@ -111,8 +121,7 @@ const handleShowCommands = (context?: CommandContext): CommandResult => {
     ]
 
     if (context?.selectedSquaddieId != undefined) {
-        commandList.push("L - Look at selected squaddie",
-            "A - Select action")
+        commandList.push("L - Look at selected squaddie", "A - Select action")
     }
 
     commandList.push("Q - Quit the game", "? - Show all commands")
@@ -157,13 +166,15 @@ const handleShowMap = (engine?: MissionEngine): CommandResult => {
         )
     const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
     const objectiveEntries = MissionObjectiveInspector.gatherEntries(engine)
-    const objectivesDisplay = MissionObjectiveInspector.formatEntries(objectiveEntries)
+    const objectivesDisplay =
+        MissionObjectiveInspector.formatEntries(objectiveEntries)
 
     const renderInfo: MapRenderInfo = {
         turnNumber,
         currentAffiliation,
         squaddieAffiliations,
-        objectivesDisplay: objectivesDisplay.length > 0 ? objectivesDisplay : undefined,
+        objectivesDisplay:
+            objectivesDisplay.length > 0 ? objectivesDisplay : undefined,
     }
 
     return { action: "showMap", message: renderMap(overview, renderInfo) }
@@ -193,6 +204,20 @@ const handleInspectCoordinate = (
             pendingActionId: undefined,
         },
     }
+}
+
+const buildActionsById = (
+    engine: MissionEngine,
+    validity: ReturnType<MissionEngine["getSquaddieActionValidity"]>
+): Map<string, SquaddieAction> => {
+    const actionsById = new Map<string, SquaddieAction>()
+    for (const validAction of validity.validActions) {
+        actionsById.set(validAction.actionId, engine.getActionById(validAction.actionId))
+    }
+    for (const invalidAction of validity.invalidActions) {
+        actionsById.set(invalidAction.actionId, engine.getActionById(invalidAction.actionId))
+    }
+    return actionsById
 }
 
 const handleLookAtSquaddie = (
@@ -228,17 +253,12 @@ const handleLookAtSquaddie = (
         lines.push(conditionsOutput)
     }
 
-    const validity = engine.getSquaddieActionValidity(
-        context.selectedSquaddieId
+    const validity = engine.getSquaddieActionValidity(context.selectedSquaddieId)
+    const actionsById = buildActionsById(engine, validity)
+    const actionsOutput = SquaddieActionInspector.formatSquaddieActionsWithKeys(
+        validity,
+        actionsById
     )
-    const actionsById = new Map<string, SquaddieAction>()
-    for (const validAction of validity.validActions) {
-        actionsById.set(
-            validAction.actionId,
-            engine.getActionById(validAction.actionId)
-        )
-    }
-    const actionsOutput = SquaddieActionInspector.formatSquaddieActions(validity, actionsById)
     if (actionsOutput.length > 0) {
         lines.push(actionsOutput)
     }
@@ -247,6 +267,24 @@ const handleLookAtSquaddie = (
         action: "lookAtSquaddie",
         message: lines.join("\n"),
     }
+}
+
+const handleListActions = (
+    engine: MissionEngine,
+    context: CommandContext
+): CommandResult => {
+    if (context?.selectedSquaddieId == undefined) {
+        throw new Error("No squaddie was selected.")
+    }
+
+    const validity = engine.getSquaddieActionValidity(context.selectedSquaddieId)
+    const actionsById = buildActionsById(engine, validity)
+    const message = SquaddieActionInspector.formatSquaddieActionsWithKeys(
+        validity,
+        actionsById
+    )
+
+    return {action: "selectAction", message}
 }
 
 const actionKeyMap: Record<string, string> = {
@@ -279,6 +317,11 @@ const handleSelectAction = (
     }
 
     const actionSuffix = normalizedInput.substring(1)
+
+    if (/^\d+$/.test(actionSuffix)) {
+        return handleSelectNumberedAction(Number.parseInt(actionSuffix), engine, context)
+    }
+
     const actionId = actionKeyMap[actionSuffix]
     if (actionId === "default-end-turn") {
         return handleEndTurn(engine, context)
@@ -293,32 +336,385 @@ const handleSelectAction = (
     }
 }
 
-const handleListActions = (
+const handleSelectNumberedAction = (
+    num: number,
     engine: MissionEngine,
     context: CommandContext
 ): CommandResult => {
-    if (context?.selectedSquaddieId == undefined) {
-        throw new Error("No squaddie was selected.")
-    }
+    const actingSquaddieId = context.selectedSquaddieId!
+    const validity = engine.getSquaddieActionValidity(actingSquaddieId)
+    const combatIndex = SquaddieActionInspector.buildCombatActionIndex(validity)
 
-    const lines: string[] = ["Select an action:"]
-
-    const actionIdToKey = new Map<string, string>()
-    for (const [key, id] of Object.entries(actionKeyMap)) {
-        actionIdToKey.set(id, key)
-    }
-
-    const validity = engine.getSquaddieActionValidity(
-        context.selectedSquaddieId
-    )
-    for (const validAction of validity.validActions) {
-        const key = actionIdToKey.get(validAction.actionId)
-        if (key != undefined) {
-            lines.push(`  ${key} - ${validAction.actionName}`)
+    const actionId = combatIndex[num - 1]
+    if (actionId == undefined) {
+        return {
+            action: "selectAction",
+            message: `No action at number ${num}.`,
         }
     }
 
-    return { action: "selectAction", message: lines.join("\n") }
+    const invalidAction = validity.invalidActions.find(
+        (a) => a.actionId === actionId
+    )
+    if (invalidAction != undefined) {
+        return {
+            action: "selectAction",
+            message: `Cannot use ${invalidAction.actionName}: ${invalidAction.reason}`,
+        }
+    }
+
+    return handleInitiateCombatAction(actionId, engine, context)
+}
+
+const handleInitiateCombatActionWith1Target = (targetIds: BattleSquaddieId[], engine: MissionEngine, actingSquaddieId: BattleSquaddieId, actionId: string): CommandResult => {
+    const targetId = targetIds[0]
+
+    const readyResult = engine.readyAction({
+        actor: actingSquaddieId,
+        targets: [targetId],
+        action: {id: actionId},
+    })
+
+    if (!readyResult.isValid) {
+        return {
+            action: "selectAction",
+            message: readyResult.message ?? "Cannot perform this action.",
+        }
+    }
+
+    const forecasts = engine.previewReadiedActionAndForecastResults()
+    const targetName = engine.getSquaddieInfo(targetId).name
+    const forecastText = SquaddieActionInspector.formatForecast(
+        forecasts,
+        targetName
+    )
+
+    return {
+        action: "executeAction",
+        message: forecastText,
+        updatedContext: {
+            selectedSquaddieId: actingSquaddieId,
+            interactionPhase: InteractionPhase.CONFIRMING_ACTION,
+            actingSquaddieId,
+            pendingActionId: actionId,
+            pendingTargetCount: 1,
+        },
+    }
+}
+const handleInitiateCombatAction = (
+    actionId: string,
+    engine: MissionEngine,
+    context: CommandContext
+): CommandResult => {
+    const actingSquaddieId = context.selectedSquaddieId!
+    const actorInfo = engine.getSquaddieInfo(actingSquaddieId)
+    const validity = engine.getSquaddieActionValidity(actingSquaddieId)
+
+    const validAction = validity.validActions.find((a) => a.actionId === actionId)
+    if (validAction == undefined) {
+        return {
+            action: "selectAction",
+            message: `Action ${actionId} is not valid.`,
+        }
+    }
+
+    const targetIds = validAction.targetBattleSquaddieIds
+
+    if (targetIds.length === 1) {
+        return handleInitiateCombatActionWith1Target(targetIds, engine, actingSquaddieId, actionId);
+    }
+
+    const tileOverlays = MovementInspector.buildTargetOverlay(validAction.targetCoordinates)
+    const overview = engine.getMapOverview()
+    const turnNumber = engine.getCurrentTurnNumber()
+    const affiliationTurn = engine.getCurrentAffiliationTurn()
+    const currentAffiliation =
+        MissionTurnService.getSquaddieAffiliationForAffiliationTurn(affiliationTurn)
+    const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
+
+    const renderInfo: MapRenderInfo = {
+        turnNumber,
+        currentAffiliation,
+        squaddieAffiliations,
+        tileOverlays,
+    }
+
+    const mapText = renderMap(overview, renderInfo)
+    const message = `${mapText}\n${actorInfo.name}: Select target (or enter invalid coordinate to cancel):`
+
+    return {
+        action: "executeAction",
+        message,
+        updatedContext: {
+            selectedSquaddieId: actingSquaddieId,
+            interactionPhase: InteractionPhase.SELECTING_TARGET,
+            actingSquaddieId,
+            pendingActionId: actionId,
+            pendingTargetCount: targetIds.length,
+        },
+    }
+}
+
+const handleCombatActionTargetSelection = (
+    rawInput: string,
+    engine: MissionEngine | undefined,
+    context: CommandContext
+): CommandResult => {
+    if (engine == undefined) {
+        return {
+            action: "cancelAction",
+            message: "No engine available to execute action.",
+            updatedContext: {
+                selectedSquaddieId: undefined,
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+                pendingActionId: undefined,
+            },
+        }
+    }
+
+    const desiredCoordinate = parseCoordinate(rawInput)
+    if (desiredCoordinate == undefined) {
+        return {
+            action: "cancelAction",
+            message: "Action cancelled.",
+            updatedContext: {
+                selectedSquaddieId: undefined,
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+                pendingActionId: undefined,
+            },
+        }
+    }
+
+    const actingSquaddieId = context.actingSquaddieId!
+    const validActionCheck = handleCombatActionTargetSelectionIsActionValid({
+        engine,
+        actingSquaddieId,
+        context,
+    })
+    if (!validActionCheck.isValid) {
+        return validActionCheck.commandResult!
+    }
+    const validAction = validActionCheck.validAction!
+
+    const validTargetAtCoordinateCheck = handleCombatActionTargetSelectionIsValidTargetAtCoordinate({
+        validAction,
+        desiredCoordinate,
+    })
+    if (!validTargetAtCoordinateCheck.isValid) {
+        return validTargetAtCoordinateCheck.commandResult!
+    }
+
+    const getTargetSquaddieIdCheck = handleCombatActionTargetSelectionGetTargetSquaddieId({engine, desiredCoordinate})
+    if (!getTargetSquaddieIdCheck.isValid) {
+        return getTargetSquaddieIdCheck.commandResult!
+    }
+    const targetSquaddieId = getTargetSquaddieIdCheck.targetSquaddieId!
+
+    const readyActionCheck = handleCombatActionTargetSelectionCheckForValidReadyAction({
+        engine,
+        actingSquaddieId,
+        targetSquaddieIds: [targetSquaddieId],
+        context,
+    })
+    if (!readyActionCheck.isValid) {
+        return readyActionCheck.commandResult!
+    }
+
+    const forecasts = engine.previewReadiedActionAndForecastResults()
+    const targetName = engine.getSquaddieInfo(targetSquaddieId).name
+    const forecastText = SquaddieActionInspector.formatForecast(
+        forecasts,
+        targetName
+    )
+
+    return {
+        action: "executeAction",
+        message: forecastText,
+        updatedContext: {
+            selectedSquaddieId: actingSquaddieId,
+            interactionPhase: InteractionPhase.CONFIRMING_ACTION,
+            actingSquaddieId,
+            pendingActionId: context.pendingActionId,
+            pendingTargetCount: context.pendingTargetCount,
+        },
+    }
+}
+
+const handleCombatActionTargetSelectionIsActionValid = (
+    {engine, actingSquaddieId, context}: {
+        engine: MissionEngine,
+        actingSquaddieId: BattleSquaddieId,
+        context: CommandContext
+    }
+): { isValid: boolean, commandResult?: CommandResult, validAction?: ValidSquaddieAction } => {
+    const validity = engine.getSquaddieActionValidity(actingSquaddieId)
+    const validAction = validity.validActions.find(
+        (a) => a.actionId === context.pendingActionId
+    )
+
+    if (validAction == undefined) {
+        return {
+            isValid: false, commandResult: {
+                action: "cancelAction",
+                message: "Action is no longer valid. Action cancelled.",
+                updatedContext: {
+                    selectedSquaddieId: undefined,
+                    interactionPhase: InteractionPhase.BROWSING,
+                    actingSquaddieId: undefined,
+                    pendingActionId: undefined,
+                },
+            }
+        }
+    }
+    return {isValid: true, validAction}
+}
+
+const handleCombatActionTargetSelectionIsValidTargetAtCoordinate = (
+    {validAction, desiredCoordinate}: { validAction: ValidSquaddieAction, desiredCoordinate: OffsetCoordinate }
+): { isValid: boolean, commandResult?: CommandResult } => {
+    const isValidTarget = validAction.targetCoordinates.some(
+        (c) =>
+            c.row === desiredCoordinate.row && c.col === desiredCoordinate.col
+    )
+
+    if (!isValidTarget) {
+        return {
+            isValid: false, commandResult: {
+                action: "cancelAction",
+                message: `(${desiredCoordinate.row},${desiredCoordinate.col}) is not a valid target. Action cancelled.`,
+                updatedContext: {
+                    selectedSquaddieId: undefined,
+                    interactionPhase: InteractionPhase.BROWSING,
+                    actingSquaddieId: undefined,
+                    pendingActionId: undefined,
+                },
+            }
+        }
+    }
+    return {isValid: true}
+}
+
+const handleCombatActionTargetSelectionGetTargetSquaddieId = (
+    {engine, desiredCoordinate}: { engine: MissionEngine, desiredCoordinate: OffsetCoordinate }
+): { isValid: boolean, commandResult?: CommandResult, targetSquaddieId?: BattleSquaddieId } => {
+    const targetSquaddieId = engine.getSquaddieAtCoordinate(desiredCoordinate)
+    if (targetSquaddieId == undefined) {
+        return {
+            isValid: false, commandResult: {
+                action: "cancelAction",
+                message: "No target at that coordinate. Action cancelled.",
+                updatedContext: {
+                    selectedSquaddieId: undefined,
+                    interactionPhase: InteractionPhase.BROWSING,
+                    actingSquaddieId: undefined,
+                    pendingActionId: undefined,
+                },
+            }
+        }
+    }
+    return {isValid: true, targetSquaddieId}
+}
+
+const handleCombatActionTargetSelectionCheckForValidReadyAction = (
+    {engine, actingSquaddieId, targetSquaddieIds, context}: {
+        engine: MissionEngine,
+        actingSquaddieId: BattleSquaddieId,
+        targetSquaddieIds: BattleSquaddieId[],
+        context: CommandContext
+    }
+): { isValid: boolean, commandResult?: CommandResult } => {
+    const readyResult = engine.readyAction({
+        actor: actingSquaddieId,
+        targets: targetSquaddieIds,
+        action: {id: context.pendingActionId!},
+    })
+
+    if (!readyResult.isValid) {
+        return {
+            isValid: false, commandResult: {
+                action: "cancelAction",
+                message: readyResult.message ?? "Cannot perform this action.",
+                updatedContext: {
+                    selectedSquaddieId: undefined,
+                    interactionPhase: InteractionPhase.BROWSING,
+                    actingSquaddieId: undefined,
+                    pendingActionId: undefined,
+                },
+            }
+        }
+    }
+    return {isValid: true}
+}
+
+const handleActionConfirmation = (
+    normalizedInput: string,
+    engine: MissionEngine | undefined,
+    context: CommandContext
+): CommandResult => {
+    if (engine == undefined) {
+        return {
+            action: "cancelAction",
+            message: "No engine available.",
+            updatedContext: {
+                selectedSquaddieId: undefined,
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+                pendingActionId: undefined,
+            },
+        }
+    }
+
+    if (normalizedInput === "Y") {
+        const actionResult = engine.useActionAndGetResults()
+        const resultText = ActionResultInspector.formatActionResults(
+            actionResult,
+            engine
+        )
+
+        return {
+            action: "executeAction",
+            message: resultText,
+            updatedContext: {
+                selectedSquaddieId: undefined,
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+                pendingActionId: undefined,
+            },
+        }
+    }
+
+    if (normalizedInput === "N" || normalizedInput === "C") {
+        engine.cancelReadiedAction()
+
+        const pendingTargetCount = context.pendingTargetCount ?? 1
+
+        if (pendingTargetCount > 1) {
+            return handleInitiateCombatAction(
+                context.pendingActionId!,
+                engine,
+                context
+            )
+        }
+
+        return {
+            action: "cancelAction",
+            message: "Action cancelled.",
+            updatedContext: {
+                selectedSquaddieId: undefined,
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+                pendingActionId: undefined,
+            },
+        }
+    }
+
+    return {
+        action: "executeAction",
+        message: "Please type Y to confirm or N/C to cancel.",
+        updatedContext: context,
+    }
 }
 
 const handleEndTurn = (
@@ -350,7 +746,7 @@ const handleInitiateMovement = (
     const info = engine.getSquaddieInfo(squaddieId)
 
     const movementOptions = engine.getMovementOptionsWithCosts(squaddieId)
-    const tileOverlays = buildMovementOverlay(movementOptions)
+    const tileOverlays = MovementInspector.buildMovementOverlay(movementOptions)
 
     const overview = engine.getMapOverview()
     const turnNumber = engine.getCurrentTurnNumber()
@@ -423,7 +819,8 @@ const handleMovementTargetSelection = (
     const isReachable =
         moveAction?.targetCoordinates.some(
             (coordinate) =>
-                coordinate.row === desiredTargetCoordinate.row && coordinate.col === desiredTargetCoordinate.col
+                coordinate.row === desiredTargetCoordinate.row &&
+                coordinate.col === desiredTargetCoordinate.col
         ) ?? false
 
     if (!isReachable) {
@@ -470,7 +867,7 @@ const handleMovementTargetSelection = (
     const tileOverlays =
         movementResult?.movement == undefined
             ? new Map<string, string>()
-            : buildRouteOverlay(movementResult.movement.expectedPath)
+            : MovementInspector.buildRouteOverlay(movementResult.movement.expectedPath)
 
     const overview = engine.getMapOverview()
     const turnNumber = engine.getCurrentTurnNumber()

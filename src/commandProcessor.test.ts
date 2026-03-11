@@ -7,6 +7,7 @@ import {
 import type { CommandContext } from "./commandProcessor.js"
 import { MissionEngineTestHarness } from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
 import { MissionAffiliationTurn } from "../logic/src/mission/missionTurn.js"
+import { RollGenerator } from "../logic/src/squaddieAction/calculate/roll/rollGenerator.js"
 
 describe("processCommand", () => {
     describe("quit action", () => {
@@ -284,7 +285,8 @@ describe("processCommand", () => {
                 actingSquaddieId: undefined,
             }
             const result = processCommand("L", engine, context)
-            expect(result.message).toContain("Scimitar -")
+            expect(result.message).toContain("Scimitar")
+            expect(result.message).toContain("[")
         })
     })
 
@@ -475,7 +477,7 @@ describe("processCommand", () => {
                 const { engine, context } = setupPlayerTurnWithLini()
                 const result = processCommand("A", engine, context)
                 expect(result.action).toBe("selectAction")
-                expect(result.message).toContain("Select an action:")
+                expect(result.message).toContain("Actions:")
                 expect(result.message).toContain("E - End Turn")
             })
 
@@ -508,14 +510,14 @@ describe("processCommand", () => {
                 const { engine, context } = setupPlayerTurnWithLini()
                 const result = processCommand("a", engine, context)
                 expect(result.action).toBe("selectAction")
-                expect(result.message).toContain("Select an action:")
+                expect(result.message).toContain("Actions:")
             })
 
             it("handles surrounding whitespace", () => {
                 const { engine, context } = setupPlayerTurnWithLini()
                 const result = processCommand("  A  ", engine, context)
                 expect(result.action).toBe("selectAction")
-                expect(result.message).toContain("Select an action:")
+                expect(result.message).toContain("Actions:")
             })
         })
 
@@ -821,6 +823,246 @@ describe("processCommand", () => {
             transitionToNextPhase(engine)
             const result = processCommand("P", engine)
             expect(result.message).toBe("Turn 0 - Player Turn")
+        })
+    })
+
+    describe("numbered combat actions (A1, A2, …)", () => {
+        const setupPlayerTurnWithLini = () => {
+            const engine = new MissionEngineTestHarness()
+            engine.transitionToNextPhase()
+            engine.transitionToNextPhase()
+            const context: CommandContext = {
+                selectedSquaddieId: engine.getLiniSquaddieId(),
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+            }
+            return { engine, context }
+        }
+
+        const drainNonPlayerTurns = (engine: MissionEngineTestHarness) => {
+            for (let i = 0; i < 20; i++) {
+                if (
+                    engine.getCurrentAffiliationTurn() ===
+                    MissionAffiliationTurn.PLAYER_TURN
+                )
+                    break
+                if (engine.getReadiedAction() != undefined) {
+                    engine.useActionAndGetResults()
+                } else {
+                    engine.transitionToNextPhase()
+                }
+            }
+        }
+
+        const setupPlayerTurnWithLiniAdjacentToEnemy = () => {
+            const allFoursQueue = Array<number>(40).fill(4)
+            const engine = new MissionEngineTestHarness(new RollGenerator(allFoursQueue))
+            const liniId = engine.getLiniSquaddieId()
+
+            engine.transitionToNextPhase()
+            engine.transitionToNextPhase()
+
+            engine.readyAction({
+                actor: liniId,
+                targets: [liniId],
+                action: {
+                    id: "default-move",
+                    decisions: { desiredMovementDestination: { row: 2, col: 2 } },
+                },
+            })
+            engine.useActionAndGetResults()
+
+            engine.endSquaddieTurn(liniId)
+
+            drainNonPlayerTurns(engine)
+
+            const context: CommandContext = {
+                selectedSquaddieId: liniId,
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+            }
+            return { engine, context }
+        }
+
+        describe("A command (list) shows numbered combat actions", () => {
+            it("shows A1 and A2 keys for Lini's combat actions", () => {
+                const { engine, context } = setupPlayerTurnWithLini()
+                const result = processCommand("A", engine, context)
+                expect(result.message).toContain("A1 -")
+                expect(result.message).toContain("A2 -")
+            })
+
+            it("shows AE and AM entries in the action list", () => {
+                const { engine, context } = setupPlayerTurnWithLini()
+                const result = processCommand("A", engine, context)
+                expect(result.message).toContain("AE - End Turn")
+                expect(result.message).toContain("AM - Move")
+            })
+
+            it("shows invalid Scimitar with reason in brackets", () => {
+                const { engine, context } = setupPlayerTurnWithLini()
+                const result = processCommand("A", engine, context)
+                expect(result.message).toContain("Scimitar")
+                expect(result.message).toContain("[")
+            })
+        })
+
+        describe("A2 (Scimitar) — single target auto-selects to CONFIRMING_ACTION when adjacent to enemy", () => {
+            it("enters CONFIRMING_ACTION phase", () => {
+                const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
+                const result = processCommand("A2", engine, context)
+                expect(result.action).toBe("executeAction")
+                expect(result.updatedContext?.interactionPhase).toBe(
+                    InteractionPhase.CONFIRMING_ACTION
+                )
+            })
+
+            it("shows forecast for the auto-selected target (the Slither Demon)", () => {
+                const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
+                const result = processCommand("A2", engine, context)
+                const slitherDemonInfo = engine.getSquaddieInfo(
+                    engine.getSlitherDemonSquaddieId()
+                )
+                expect(result.message).toContain("Forecast for")
+                expect(result.message).toContain(slitherDemonInfo.name)
+            })
+
+            it("sets pendingTargetCount to 1 for single-target action", () => {
+                const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
+                const result = processCommand("A2", engine, context)
+                expect(result.updatedContext?.pendingTargetCount).toBe(1)
+            })
+
+            it("preserves the acting squaddie in the updated context", () => {
+                const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
+                const result = processCommand("A2", engine, context)
+                expect(result.updatedContext?.actingSquaddieId).toEqual(
+                    engine.getLiniSquaddieId()
+                )
+            })
+        })
+
+        describe("selecting an invalid numbered action", () => {
+            it("returns an error message without entering CONFIRMING_ACTION", () => {
+                const { engine, context } = setupPlayerTurnWithLini()
+                const result = processCommand("A2", engine, context)
+                expect(result.action).toBe("selectAction")
+                expect(result.message).toContain("Scimitar")
+                expect(result.updatedContext).toBeUndefined()
+            })
+
+            it("returns an error for an out-of-range number", () => {
+                const { engine, context } = setupPlayerTurnWithLini()
+                const result = processCommand("A99", engine, context)
+                expect(result.action).toBe("selectAction")
+                expect(result.message).toContain("No action at number 99")
+            })
+        })
+
+        describe("CONFIRMING_ACTION — Y executes, N/C cancels", () => {
+            const setupInConfirmingAction = () => {
+                const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
+                const selectResult = processCommand("A2", engine, context)
+                const confirmingContext = selectResult.updatedContext!
+                return { engine, confirmingContext }
+            }
+
+            it("Y executes the action and returns to BROWSING", () => {
+                const { engine, confirmingContext } = setupInConfirmingAction()
+                const result = processCommand("Y", engine, confirmingContext)
+                expect(result.action).toBe("executeAction")
+                expect(result.updatedContext?.interactionPhase).toBe(
+                    InteractionPhase.BROWSING
+                )
+            })
+
+            it("Y shows the action result with degree of success", () => {
+                const { engine, confirmingContext } = setupInConfirmingAction()
+                const result = processCommand("Y", engine, confirmingContext)
+                expect(result.message).toContain("Result:")
+            })
+
+            it("Y clears the selected and acting squaddie", () => {
+                const { engine, confirmingContext } = setupInConfirmingAction()
+                const result = processCommand("Y", engine, confirmingContext)
+                expect(result.updatedContext?.selectedSquaddieId).toBeUndefined()
+                expect(result.updatedContext?.actingSquaddieId).toBeUndefined()
+            })
+
+            it("N cancels the action and returns to BROWSING when pendingTargetCount is 1", () => {
+                const { engine, confirmingContext } = setupInConfirmingAction()
+                const result = processCommand("N", engine, confirmingContext)
+                expect(result.action).toBe("cancelAction")
+                expect(result.updatedContext?.interactionPhase).toBe(
+                    InteractionPhase.BROWSING
+                )
+            })
+
+            it("C cancels the action and returns to BROWSING when pendingTargetCount is 1", () => {
+                const { engine, confirmingContext } = setupInConfirmingAction()
+                const result = processCommand("C", engine, confirmingContext)
+                expect(result.action).toBe("cancelAction")
+                expect(result.updatedContext?.interactionPhase).toBe(
+                    InteractionPhase.BROWSING
+                )
+            })
+
+            it("unknown input prompts to use Y or N/C", () => {
+                const { engine, confirmingContext } = setupInConfirmingAction()
+                const result = processCommand("X", engine, confirmingContext)
+                expect(result.message).toContain("Y")
+                expect(result.message).toContain("N")
+            })
+
+            it("N cancels the readied action so the engine has no pending action", () => {
+                const { engine, confirmingContext } = setupInConfirmingAction()
+                processCommand("N", engine, confirmingContext)
+                expect(engine.getReadiedAction()).toBeUndefined()
+            })
+        })
+
+        describe("SELECTING_TARGET for combat action", () => {
+            it("cancels when a non-coordinate input is entered during combat target selection", () => {
+                const engine = new MissionEngineTestHarness()
+                engine.transitionToNextPhase()
+                engine.transitionToNextPhase()
+                const liniId = engine.getLiniSquaddieId()
+
+                const context: CommandContext = {
+                    selectedSquaddieId: liniId,
+                    interactionPhase: InteractionPhase.SELECTING_TARGET,
+                    actingSquaddieId: liniId,
+                    pendingActionId: "lini-heal",
+                    pendingTargetCount: 1,
+                }
+
+                const result = processCommand("gibberish", engine, context)
+                expect(result.action).toBe("cancelAction")
+                expect(result.updatedContext?.interactionPhase).toBe(
+                    InteractionPhase.BROWSING
+                )
+            })
+
+            it("cancels when an out-of-range coordinate is entered during combat target selection", () => {
+                const engine = new MissionEngineTestHarness()
+                engine.transitionToNextPhase()
+                engine.transitionToNextPhase()
+                const liniId = engine.getLiniSquaddieId()
+
+                const context: CommandContext = {
+                    selectedSquaddieId: liniId,
+                    interactionPhase: InteractionPhase.SELECTING_TARGET,
+                    actingSquaddieId: liniId,
+                    pendingActionId: "lini-heal",
+                    pendingTargetCount: 2,
+                }
+
+                const result = processCommand("0, 4", engine, context)
+                expect(result.action).toBe("cancelAction")
+                expect(result.updatedContext?.interactionPhase).toBe(
+                    InteractionPhase.BROWSING
+                )
+            })
         })
     })
 })

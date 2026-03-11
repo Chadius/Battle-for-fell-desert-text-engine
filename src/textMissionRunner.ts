@@ -78,9 +78,6 @@ export class TextMissionRunner {
             return { text: allText, shouldQuit: true }
         }
 
-        // If mission was already ended by a previous processInput call (rewards already
-        // marked), re-surface the summary so the caller always sees it regardless of
-        // which input happened to trigger the final detection.
         if (this.engine.isDone()) {
             const rewarded = this.engine.getCompletedAndRewardedMissionObjectives()
             const summaryText = this.formatMissionSummary(rewarded)

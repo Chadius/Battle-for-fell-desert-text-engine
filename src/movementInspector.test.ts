@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { buildMovementOverlay, buildRouteOverlay } from "./movementInspector.js"
+import { MovementInspector } from "./movementInspector.js"
 import { CoordinateMovePathService, CoordinateMovePathMoveType } from "../logic/src/coordinateMap/path/path.js"
 
 describe("movementInspector", () => {
@@ -8,7 +8,7 @@ describe("movementInspector", () => {
             const options = [
                 { destination: { row: 0, col: 2 }, actionPointCost: 1 },
             ]
-            const overlay = buildMovementOverlay(options)
+            const overlay = MovementInspector.buildMovementOverlay(options)
             expect(overlay.get("0,2")).toBe("1")
         })
 
@@ -17,27 +17,26 @@ describe("movementInspector", () => {
                 { destination: { row: 0, col: 1 }, actionPointCost: 1 },
                 { destination: { row: 0, col: 2 }, actionPointCost: 2 },
             ]
-            const overlay = buildMovementOverlay(options)
+            const overlay = MovementInspector.buildMovementOverlay(options)
             expect(overlay.get("0,1")).toBe("1")
             expect(overlay.get("0,2")).toBe("2")
         })
 
         it("returns empty Map for empty options array", () => {
-            const overlay = buildMovementOverlay([])
+            const overlay = MovementInspector.buildMovementOverlay([])
             expect(overlay.size).toBe(0)
         })
     })
 
     describe("buildRouteOverlay", () => {
         it("marks a non-final step with **", () => {
-            // The first step in a two-step path is not the destination
             const path = CoordinateMovePathService.new({
                 steps: [
                     { row: 0, col: 0, moveType: CoordinateMovePathMoveType.START, moveCost: 0 },
                     { row: 0, col: 1, moveType: CoordinateMovePathMoveType.WALK, moveCost: 1 },
                 ],
             })
-            const overlay = buildRouteOverlay(path)
+            const overlay = MovementInspector.buildRouteOverlay(path)
             expect(overlay.get("0,0")).toBe("**")
         })
 
@@ -48,7 +47,7 @@ describe("movementInspector", () => {
                     { row: 0, col: 1, moveType: CoordinateMovePathMoveType.WALK, moveCost: 1 },
                 ],
             })
-            const overlay = buildRouteOverlay(path)
+            const overlay = MovementInspector.buildRouteOverlay(path)
             expect(overlay.get("0,1")).toBe("!!")
         })
 
@@ -60,7 +59,7 @@ describe("movementInspector", () => {
                     { row: 0, col: 2, moveType: CoordinateMovePathMoveType.WALK, moveCost: 1 },
                 ],
             })
-            const overlay = buildRouteOverlay(path)
+            const overlay = MovementInspector.buildRouteOverlay(path)
             expect(overlay.get("0,0")).toBe("**")
             expect(overlay.get("0,1")).toBe("**")
             expect(overlay.get("0,2")).toBe("!!")
@@ -72,7 +71,7 @@ describe("movementInspector", () => {
                     { row: 1, col: 3, moveType: CoordinateMovePathMoveType.START, moveCost: 0 },
                 ],
             })
-            const overlay = buildRouteOverlay(path)
+            const overlay = MovementInspector.buildRouteOverlay(path)
             expect(overlay.get("1,3")).toBe("!!")
         })
     })
