@@ -940,6 +940,15 @@ describe("processCommand", () => {
                     engine.getLiniSquaddieId()
                 )
             })
+
+            // Forecast message should always include the confirmation prompt
+            it("forecast message includes confirmation prompt", () => {
+                const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
+                const result = processCommand("A2", engine, context)
+                expect(result.message).toContain(
+                    "Press Y to confirm or N/C to cancel."
+                )
+            })
         })
 
         describe("selecting an invalid numbered action", () => {

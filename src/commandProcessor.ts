@@ -391,7 +391,7 @@ const handleInitiateCombatActionWith1Target = (targetIds: BattleSquaddieId[], en
 
     return {
         action: "executeAction",
-        message: forecastText,
+        message: forecastText + "\nPress Y to confirm or N/C to cancel.",
         updatedContext: {
             selectedSquaddieId: actingSquaddieId,
             interactionPhase: InteractionPhase.CONFIRMING_ACTION,
@@ -531,7 +531,7 @@ const handleCombatActionTargetSelection = (
 
     return {
         action: "executeAction",
-        message: forecastText,
+        message: forecastText + "\nPress Y to confirm or N/C to cancel.",
         updatedContext: {
             selectedSquaddieId: actingSquaddieId,
             interactionPhase: InteractionPhase.CONFIRMING_ACTION,

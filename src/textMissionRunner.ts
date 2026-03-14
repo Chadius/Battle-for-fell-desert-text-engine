@@ -11,6 +11,7 @@ import {
     MissionAffiliationTurn,
     type TMissionAffiliationTurn,
 } from "../logic/src/mission/missionTurn.js"
+import { EnemyAI } from "./enemyAI.js"
 import {MissionObjectiveRewardType, TMissionObjectiveRewardType} from "../logic/src/mission/missionObjectiveReward.js"
 import type { MissionObjective } from "../logic/src/mission/missionObjective.js"
 
@@ -179,12 +180,52 @@ export class TextMissionRunner {
         return interactivePhases.includes(phase)
     }
 
+    // Loop until reaching a human-controlled interactive phase, auto-processing
+    // AI-controlled phases (e.g. ENEMY_TURN) along the way.
     private advanceToInteractivePhase(): string[] {
-        const currentPhase = this.engine.getCurrentAffiliationTurn()
-        if (this.isInteractivePhase(currentPhase)) {
-            return this.announceRecentTransitions(currentPhase)
+        const allMessages: string[] = []
+        const MAX_AI_ITERATIONS = 10
+        let aiIterations = 0
+
+        while (true) {
+            const currentPhase = this.engine.getCurrentAffiliationTurn()
+
+            if (!this.isInteractivePhase(currentPhase)) {
+                // Advance through non-interactive bookend phases (START/END)
+                allMessages.push(...this.advanceToInteractivePhaseManually())
+                continue
+            }
+
+            if (currentPhase === MissionAffiliationTurn.ENEMY_TURN) {
+                allMessages.push(...this.announceRecentTransitions(currentPhase))
+                const readiedAction = this.engine.getReadiedAction()
+                if (readiedAction != undefined) {
+                    allMessages.push(...this.processEnemySquaddies())
+                    aiIterations += 1
+                    if (aiIterations >= MAX_AI_ITERATIONS) {
+                        throw new Error(
+                            "AI processed too many turns without advancing — possible loop"
+                        )
+                    }
+                    continue
+                }
+                // No readied action — engine already auto-advanced past this turn
+                break
+            }
+
+            // Human-controlled interactive phase — stop and wait for input
+            allMessages.push(...this.announceRecentTransitions(currentPhase))
+            break
         }
-        return this.advanceToInteractivePhaseManually()
+
+        return allMessages
+    }
+
+    // Execute one AI action for the first enemy who can act this phase
+    private processEnemySquaddies(): string[] {
+        const squaddieIds = this.engine.getSquaddiesWhoCanActThisPhase()
+        if (squaddieIds.length === 0) return []
+        return EnemyAI.takeTurn(this.engine, squaddieIds[0])
     }
 
     private announceRecentTransitions(
