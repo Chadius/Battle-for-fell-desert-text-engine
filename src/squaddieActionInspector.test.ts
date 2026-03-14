@@ -7,6 +7,13 @@ import type {SquaddieAction} from "../logic/src/squaddieAction/squaddieAction.js
 import {SquaddieActionService} from "../logic/src/squaddieAction/squaddieAction.js"
 import {MissionEngineTestHarness} from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
 import {DegreeOfSuccess} from "../logic/src/degreesOfSuccess/degreeOfSuccess.js"
+import type {SerializedForecastedActionResult} from "../logic/src/squaddieAction/calculate/result/squaddieActionResultCalculator.js"
+import {
+    SquaddieConditionDecaysAt,
+    SquaddieConditionService,
+    SquaddieConditionSource,
+    SquaddieConditionType,
+} from "../logic/src/proficiency/squaddieCondition.js"
 
 describe("squaddieActionInspector", () => {
     describe("formatActionPointCost", () => {
@@ -452,14 +459,47 @@ describe("squaddieActionInspector", () => {
                 actionsById
             )
 
-            expect(result).toContain(
-                `A1 - Heal`
-            )
-            expect(result).toContain(
-                `A2 - Scimitar`
-            )
+            expect(result).toContain(`A1 - Blessing`)
+            expect(result).toContain(`A2 - Heal`)
+            expect(result).toContain(`A3 - Scimitar`)
             expect(result).toContain("AE - End Turn")
             expect(result).toContain("AM - Move")
+        })
+    })
+
+    describe("formatForecast", () => {
+        it("shows condition added in forecast effect description", () => {
+            const engine = new MissionEngineTestHarness()
+            const liniId = engine.getLiniSquaddieId()
+
+            const forecasts: SerializedForecastedActionResult[] = [
+                {
+                    battleSquaddieId: liniId,
+                    degreeOfSuccess: DegreeOfSuccess.SUCCESS,
+                    chanceOutOf36: 36,
+                    squaddieActionResults: [
+                        {
+                            inBattleSquaddieId: liniId.inBattleSquaddieId,
+                            outOfBattleSquaddieId: liniId.outOfBattleSquaddieId,
+                            conditionsAdded: [
+                                SquaddieConditionService.new({
+                                    type: SquaddieConditionType.ARMOR,
+                                    amount: 1,
+                                    duration: {
+                                        duration: 2,
+                                        decaysAt: SquaddieConditionDecaysAt.TURN_END,
+                                    },
+                                    source: SquaddieConditionSource.PHYSICAL,
+                                }),
+                            ],
+                        },
+                    ],
+                },
+            ]
+
+            const result = SquaddieActionInspector.formatForecast(forecasts, "Lini")
+            expect(result).toContain("gains ARMOR 1 for 2 turns")
+            expect(result).not.toContain("no effect")
         })
     })
 })

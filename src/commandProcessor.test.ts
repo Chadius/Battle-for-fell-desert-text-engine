@@ -907,10 +907,10 @@ describe("processCommand", () => {
             })
         })
 
-        describe("A2 (Scimitar) — single target auto-selects to CONFIRMING_ACTION when adjacent to enemy", () => {
+        describe("A3 (Scimitar) — single target auto-selects to CONFIRMING_ACTION when adjacent to enemy", () => {
             it("enters CONFIRMING_ACTION phase", () => {
                 const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
-                const result = processCommand("A2", engine, context)
+                const result = processCommand("A3", engine, context)
                 expect(result.action).toBe("executeAction")
                 expect(result.updatedContext?.interactionPhase).toBe(
                     InteractionPhase.CONFIRMING_ACTION
@@ -919,7 +919,7 @@ describe("processCommand", () => {
 
             it("shows forecast for the auto-selected target (the Slither Demon)", () => {
                 const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
-                const result = processCommand("A2", engine, context)
+                const result = processCommand("A3", engine, context)
                 const slitherDemonInfo = engine.getSquaddieInfo(
                     engine.getSlitherDemonSquaddieId()
                 )
@@ -929,13 +929,13 @@ describe("processCommand", () => {
 
             it("sets pendingTargetCount to 1 for single-target action", () => {
                 const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
-                const result = processCommand("A2", engine, context)
+                const result = processCommand("A3", engine, context)
                 expect(result.updatedContext?.pendingTargetCount).toBe(1)
             })
 
             it("preserves the acting squaddie in the updated context", () => {
                 const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
-                const result = processCommand("A2", engine, context)
+                const result = processCommand("A3", engine, context)
                 expect(result.updatedContext?.actingSquaddieId).toEqual(
                     engine.getLiniSquaddieId()
                 )
@@ -944,7 +944,7 @@ describe("processCommand", () => {
             // Forecast message should always include the confirmation prompt
             it("forecast message includes confirmation prompt", () => {
                 const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
-                const result = processCommand("A2", engine, context)
+                const result = processCommand("A3", engine, context)
                 expect(result.message).toContain(
                     "Press Y to confirm or N/C to cancel."
                 )
@@ -954,7 +954,7 @@ describe("processCommand", () => {
         describe("selecting an invalid numbered action", () => {
             it("returns an error message without entering CONFIRMING_ACTION", () => {
                 const { engine, context } = setupPlayerTurnWithLini()
-                const result = processCommand("A2", engine, context)
+                const result = processCommand("A3", engine, context)
                 expect(result.action).toBe("selectAction")
                 expect(result.message).toContain("Scimitar")
                 expect(result.updatedContext).toBeUndefined()

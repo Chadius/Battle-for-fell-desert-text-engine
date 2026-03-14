@@ -164,6 +164,10 @@ const formatForecast = (
         const healingResult = forecast.squaddieActionResults.find(
             (r) => r.healing != undefined
         )
+        // Check for condition-only outcomes (e.g., Blessing applies ARMOR)
+        const conditionResult = forecast.squaddieActionResults.find(
+            (r) => r.conditionsAdded != undefined && r.conditionsAdded.length > 0
+        )
 
         let effectDesc = "no effect"
         if (damageResult?.damage != undefined) {
@@ -172,6 +176,18 @@ const formatForecast = (
             if (willKo) effectDesc += " (will KO)"
         } else if (healingResult?.healing != undefined) {
             effectDesc = `heals ${healingResult.healing.net} HP`
+        } else if (conditionResult?.conditionsAdded != undefined) {
+            effectDesc = conditionResult.conditionsAdded
+                .map((c) => {
+                    let desc = `gains ${c.type}`
+                    if (c.amount?.current != undefined) desc += ` ${c.amount.current}`
+                    if (c.limit.duration?.duration != undefined) {
+                        const turns = c.limit.duration.duration
+                        desc += ` for ${turns} ${turns === 1 ? "turn" : "turns"}`
+                    }
+                    return desc
+                })
+                .join(", ")
         }
 
         lines.push(`  ${chance} ${degree} → ${effectDesc}`)
