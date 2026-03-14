@@ -134,7 +134,7 @@ completeness:
 
 1. **Enemy AI system** — There is no module that decides what an enemy squaddie should do during
    its turn (which action to use, which target to pick, whether to move first). The engine has no
-   `getRecommendedEnemyAction()` or similar method.
+   `getRecommendedEnemyAction()` or similar method. (DONE)
 
 2. **Ally AI system** — Same as enemies. Allied squaddies that are not player-controlled have no
    decision-making path.
@@ -143,7 +143,7 @@ completeness:
    squaddie." Affiliation determines which phase a squaddie acts in, but nothing in the engine
    specifies whether a given squaddie during its affiliation turn is controlled by the human
    player, an AI, or something else. The runner currently treats all active-phase squaddies as
-   human-controlled by default.
+   human-controlled by default. (DONE)
 
 4. **Status effect processing** — Conditions appear in `SquaddieInfo.conditions` and are
    displayed, but it is unclear whether timed conditions (e.g., burning, slowed) are decremented
@@ -166,7 +166,7 @@ moving, attacking, seeing results, watching enemies act, and receiving a win or 
   squaddies survived) and set `shouldQuit = true` in `ProcessInputResult`.
 - Add a test: verify the runner returns `shouldQuit = true` after the last enemy is defeated.
 
-### Phase 2 — Combat Action Execution
+### Phase 2 — Combat Action Execution (DONE)
 
 **Goal:** The player can select and execute combat actions against valid targets.
 
@@ -180,7 +180,7 @@ moving, attacking, seeing results, watching enemies act, and receiving a win or 
 - Display the result: who was targeted, degree of success, damage or healing applied, and
   updated HP.
 
-### Phase 3 — Action Forecast and Confirmation
+### Phase 3 — Action Forecast and Confirmation (DONE)
 
 **Goal:** The player can preview hit probability before committing.
 
@@ -199,7 +199,7 @@ moving, attacking, seeing results, watching enemies act, and receiving a win or 
 - Display what was reversed (action name, actor, targets, stat changes restored).
 - If undo is not available, display the reason returned by the engine.
 
-### Phase 5 — Enemy AI
+### Phase 5 — Enemy AI (DONE)
 
 **Goal:** Enemies act automatically on their turn; the player observes the results.
 

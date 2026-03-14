@@ -1,6 +1,7 @@
 import type { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
 import type { BattleSquaddieId } from "../logic/src/squaddie/inBattle/inBattleSquaddieManager.js"
 import type { OffsetMaybeOffmapCoordinate } from "../logic/src/coordinateMap/coordinateMap.js"
+import { ActionResultInspector } from "./actionResultInspector.js"
 
 // EnemyAI handles execution of AI-decided actions during the enemy turn.
 // The engine's built-in strategy (SimpleAggressorStrategy) preloads the next action
@@ -22,14 +23,19 @@ export const EnemyAI = {
 
         // Use the actor from the readied action (the engine's strategy selected it)
         const actorId = readiedAction.actor
+        // Capture actionId before execution — the readied action is cleared after useActionAndGetResults
+        const actionId = readiedAction.action.id
         const info = engine.getSquaddieInfo(actorId)
         const positionBefore = engine.getSquaddiePosition(actorId)
 
-        engine.useActionAndGetResults()
+        const actionResult = engine.useActionAndGetResults()
 
         const positionAfter = engine.getSquaddiePosition(actorId)
 
-        return buildNarration(info.name, positionBefore, positionAfter)
+        const narration = buildNarration(info.name, positionBefore, positionAfter)
+        const resultText = ActionResultInspector.formatActionResults(actionResult, engine, actionId)
+        if (resultText.length > 0) narration.push(resultText)
+        return narration
     },
 }
 

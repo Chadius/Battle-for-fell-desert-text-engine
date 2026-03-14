@@ -242,10 +242,63 @@ describe("ActionResultInspector", () => {
             expect(result).toContain(`gains ${SquaddieConditionType.SLOWED} 1 for 1 turn`)
         })
 
-        it("skips results that only contain action point spending", () => {
+        it("omits Result line when action has only one degree of success", () => {
             const engine = new MissionEngineTestHarness()
             const liniId = engine.getLiniSquaddieId()
 
+            // "lini-heal" only defines a SUCCESS outcome — degreesOfSuccess.length === 1
+            const healActionId = "lini-heal"
+
+            const actionResult: ActionResult = {
+                targetResults: {
+                    "lini-key": {
+                        degreeOfSuccess: DegreeOfSuccess.SUCCESS,
+                        squaddieActionResults: [
+                            {
+                                inBattleSquaddieId: liniId.inBattleSquaddieId,
+                                outOfBattleSquaddieId:
+                                    liniId.outOfBattleSquaddieId,
+                                healing: { net: 2, raw: 2 },
+                            },
+                        ],
+                    },
+                },
+            }
+
+            const result = ActionResultInspector.formatActionResults(
+                actionResult,
+                engine,
+                healActionId
+            )
+            expect(result).toContain("heals 2 HP")
+            expect(result).not.toContain("Result:")
+        })
+
+        it("shows Result line when attack misses with no effects", () => {
+            const engine = new MissionEngineTestHarness()
+            const liniId = engine.getLiniSquaddieId()
+
+            const actionResult: ActionResult = {
+                targetResults: {
+                    "lini-key": {
+                        degreeOfSuccess: DegreeOfSuccess.FAILURE,
+                        squaddieActionResults: [],
+                    },
+                },
+            }
+
+            const result = ActionResultInspector.formatActionResults(
+                actionResult,
+                engine
+            )
+            expect(result).toContain("Result: Failure")
+        })
+
+        it("omits Result line for movement with no effects", () => {
+            const engine = new MissionEngineTestHarness()
+            const liniId = engine.getLiniSquaddieId()
+
+            // Movement results have only actionPoints/movement — no damage, healing, or conditions
             const actionResult: ActionResult = {
                 targetResults: {
                     "lini-key": {
@@ -267,7 +320,9 @@ describe("ActionResultInspector", () => {
                 engine
             )
 
-            expect(result).toContain("Result: Success")
+            // No effects means nothing should be emitted — not even "Result: Success"
+            expect(result).toBe("")
+            expect(result).not.toContain("Result:")
             expect(result).not.toContain("Lini takes")
             expect(result).not.toContain("Lini heals")
         })

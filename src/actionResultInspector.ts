@@ -5,8 +5,13 @@ import type {TDegreeOfSuccess} from "../logic/src/degreesOfSuccess/degreeOfSucce
 import type {TargetResult} from "../logic/src/mission/targetResult.js"
 
 export const ActionResultInspector = {
-    formatActionResults: (result: ActionResult, engine: MissionEngine): string =>
-        formatActionResults(result, engine),
+    // actionId is optional; when provided, the function looks up the action's possible
+    // degrees of success so it can omit the "Result:" header for single-outcome actions.
+    formatActionResults: (
+        result: ActionResult,
+        engine: MissionEngine,
+        actionId?: string
+    ): string => formatActionResults(result, engine, actionId),
 }
 
 const formatDegreeOfSuccess = (degree: TDegreeOfSuccess): string => {
@@ -78,11 +83,11 @@ const formatConditionsAddedLines = (
 
 const formatTargetResult = (
     targetResult: TargetResult,
-    engine: MissionEngine
+    engine: MissionEngine,
+    degreesOfSuccess: TDegreeOfSuccess[] | undefined
 ): string[] => {
-    const lines: string[] = [
-        `Result: ${formatDegreeOfSuccess(targetResult.degreeOfSuccess)}`,
-    ]
+    // Collect effect lines first; only emit the "Result:" header if there are effects
+    const effectLines: string[] = []
 
     for (const squaddieResult of targetResult.squaddieActionResults) {
         const hasEffects =
@@ -93,19 +98,36 @@ const formatTargetResult = (
         if (!hasEffects) continue
 
         const name = getSquaddieName(squaddieResult, engine)
-        lines.push(
+        effectLines.push(
             ...formatDamageLines(squaddieResult, name),
             ...formatHealingLines(squaddieResult, name),
             ...formatConditionsAddedLines(squaddieResult, name),
         )
     }
 
-    return lines
+    if (effectLines.length === 0) {
+        // A miss (FAILURE/BOTCH) is always worth announcing even with no applied effects
+        if (
+            targetResult.degreeOfSuccess === "FAILURE" ||
+            targetResult.degreeOfSuccess === "BOTCH"
+        ) {
+            return [`Result: ${formatDegreeOfSuccess(targetResult.degreeOfSuccess)}`]
+        }
+        return []
+    }
+    // Omit the "Result:" header when the action can only produce a single outcome —
+    // announcing the outcome adds no information the player doesn't already expect.
+    if (degreesOfSuccess != undefined && degreesOfSuccess.length === 1) return effectLines
+    return [
+        `Result: ${formatDegreeOfSuccess(targetResult.degreeOfSuccess)}`,
+        ...effectLines,
+    ]
 }
 
 const formatActionResults = (
     result: ActionResult,
-    engine: MissionEngine
+    engine: MissionEngine,
+    actionId?: string
 ): string => {
     const lines: string[] = []
 
@@ -113,8 +135,15 @@ const formatActionResults = (
         lines.push(`Roll: [${result.actorRoll[0]}, ${result.actorRoll[1]}]`)
     }
 
+    // Look up the action's possible degrees so formatTargetResult can decide
+    // whether the outcome header is worth announcing.
+    const degreesOfSuccess: TDegreeOfSuccess[] | undefined =
+        actionId != undefined
+            ? engine.getActionById(actionId)?.degreesOfSuccess
+            : undefined
+
     for (const targetResult of Object.values(result.targetResults)) {
-        lines.push(...formatTargetResult(targetResult, engine))
+        lines.push(...formatTargetResult(targetResult, engine, degreesOfSuccess))
     }
 
     return lines.join("\n")

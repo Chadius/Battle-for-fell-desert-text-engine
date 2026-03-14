@@ -82,6 +82,43 @@ describe("EnemyAI", () => {
             ).toBe(true)
         })
 
+        it("narration includes attack result text when enemy attacks", () => {
+            // Helper: move Lini adjacent to the Slither Demon at (3,4),
+            // then end her turn so ENEMY_TURN starts with an attack action preloaded.
+            const allFoursQueue = Array<number>(40).fill(4)
+            const engine = new MissionEngineTestHarness(
+                new RollGenerator(allFoursQueue)
+            )
+            const liniId = engine.getLiniSquaddieId()
+            const slitherDemonId = engine.getSlitherDemonSquaddieId()
+
+            engine.transitionToNextPhase()
+            engine.transitionToNextPhase()
+
+            // Move Lini adjacent to the Slither Demon at (3,4)
+            engine.readyAction({
+                actor: liniId,
+                targets: [liniId],
+                action: {
+                    id: "default-move",
+                    decisions: { desiredMovementDestination: { row: 3, col: 3 } },
+                },
+            })
+            engine.useActionAndGetResults()
+            engine.endSquaddieTurn(liniId)
+
+            const messages = EnemyAI.takeTurn(engine, slitherDemonId)
+
+            // Should include roll info or damage text from ActionResultInspector
+            expect(
+                messages.some(
+                    (m) =>
+                        m.includes("Roll:") ||
+                        m.includes("takes")
+                )
+            ).toBe(true)
+        })
+
         it("returns end-turn narration when no action is preloaded", () => {
             // Manually advance to ENEMY_TURN without triggering autoAdvance,
             // so no action is preloaded by the AI strategy
