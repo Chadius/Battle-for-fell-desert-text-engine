@@ -70,7 +70,7 @@ export const processCommand = (
     }
 
     if (normalizedInput === "?") {
-        return handleShowCommands(context)
+        return handleShowCommands(context, engine)
     }
 
     if (normalizedInput === "L") {
@@ -116,7 +116,7 @@ export const processCommand = (
     return { action: "echo", message: `You entered: ${rawInput}` }
 }
 
-const handleShowCommands = (context?: CommandContext): CommandResult => {
+const handleShowCommands = (context?: CommandContext, engine?: MissionEngine): CommandResult => {
     const commandList = [
         "M - Show the map",
         "O - Show objectives",
@@ -130,6 +130,18 @@ const handleShowCommands = (context?: CommandContext): CommandResult => {
     }
 
     commandList.push("Z - Undo last action", "Q - Quit the game", "? - Show all commands")
+
+    // Append turn flow explanation
+    commandList.push("", "Turn Flow: Player Turn → Enemy Turn → Ally Turn → Other Turn → next round")
+
+    // Append objectives summary if an engine is available
+    if (engine != undefined) {
+        const entries = MissionObjectiveInspector.gatherEntries(engine)
+        const objectivesSummary = MissionObjectiveInspector.formatEntries(entries)
+        if (objectivesSummary.length > 0) {
+            commandList.push("", objectivesSummary)
+        }
+    }
 
     return { action: "showCommands", message: commandList.join("\n") }
 }
@@ -317,8 +329,21 @@ const handleSelectAction = (
         }
     }
 
+    // A alone is read-only, so allow it for any selected squaddie regardless of affiliation
     if (normalizedInput === "A") {
         return handleListActions(engine, context)
+    }
+
+    // Guard: state-mutating sub-commands require the selected squaddie to belong to the current phase
+    const phaseAffiliation = MissionTurnService.getSquaddieAffiliationForAffiliationTurn(
+        engine.getCurrentAffiliationTurn()
+    )
+    const selectedSquaddieInfo = engine.getSquaddieInfo(context.selectedSquaddieId)
+    if (phaseAffiliation == undefined || phaseAffiliation !== selectedSquaddieInfo.affiliation) {
+        return {
+            action: "selectAction",
+            message: `Cannot command ${selectedSquaddieInfo.name}: it is not ${selectedSquaddieInfo.affiliation}'s turn.`,
+        }
     }
 
     const actionSuffix = normalizedInput.substring(1)

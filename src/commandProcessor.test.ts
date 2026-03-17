@@ -90,6 +90,17 @@ describe("processCommand", () => {
             const result = processCommand("?")
             expect(result.message).toContain("O - Show objectives")
         })
+
+        it("shows turn flow explanation in help text", () => {
+            const result = processCommand("?")
+            expect(result.message).toContain("Turn Flow")
+        })
+
+        it("shows objective summary in help text when engine is provided", () => {
+            const engine = new MissionEngineTestHarness()
+            const result = processCommand("?", engine)
+            expect(result.message).toContain("Defeat")
+        })
     })
 
     describe("inspectCoordinate action", () => {
@@ -1072,6 +1083,60 @@ describe("processCommand", () => {
                     InteractionPhase.BROWSING
                 )
             })
+        })
+    })
+
+    describe("wrong-affiliation guard", () => {
+        // Advance to PLAYER_TURN and set the Slither Demon as the selected squaddie.
+        const setupEnemySelectedDuringPlayerTurn = () => {
+            const engine = new MissionEngineTestHarness()
+            engine.transitionToNextPhase()
+            engine.transitionToNextPhase()
+            const context: CommandContext = {
+                selectedSquaddieId: engine.getSlitherDemonSquaddieId(),
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+            }
+            return { engine, context }
+        }
+
+        it("returns action list when enemy is selected and A is pressed during PLAYER_TURN", () => {
+            const { engine, context } = setupEnemySelectedDuringPlayerTurn()
+            const result = processCommand("A", engine, context)
+            expect(result.action).toBe("selectAction")
+            expect(result.message).not.toContain("Cannot command")
+            expect(result.message).toContain("Actions:")
+        })
+
+        it("returns selectAction error when enemy is selected and AE is pressed during PLAYER_TURN", () => {
+            const { engine, context } = setupEnemySelectedDuringPlayerTurn()
+            const result = processCommand("AE", engine, context)
+            expect(result.action).toBe("selectAction")
+            expect(result.message).toContain("Cannot command")
+            expect(result.message).toContain("not")
+            expect(result.message).toContain("turn")
+        })
+
+        it("returns selectAction error when enemy is selected and AM is pressed during PLAYER_TURN", () => {
+            const { engine, context } = setupEnemySelectedDuringPlayerTurn()
+            const result = processCommand("AM", engine, context)
+            expect(result.action).toBe("selectAction")
+            expect(result.message).toContain("Cannot command")
+            expect(result.message).toContain("not")
+            expect(result.message).toContain("turn")
+        })
+
+        it("does not return the guard error when Lini is selected during PLAYER_TURN", () => {
+            const engine = new MissionEngineTestHarness()
+            engine.transitionToNextPhase()
+            engine.transitionToNextPhase()
+            const context: CommandContext = {
+                selectedSquaddieId: engine.getLiniSquaddieId(),
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+            }
+            const result = processCommand("A", engine, context)
+            expect(result.message).not.toContain("Cannot command")
         })
     })
 
