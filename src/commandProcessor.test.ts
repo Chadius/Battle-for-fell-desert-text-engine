@@ -1074,4 +1074,106 @@ describe("processCommand", () => {
             })
         })
     })
+
+    describe("Z - undo action", () => {
+        // Shared setup: advance to PLAYER_TURN so Lini can act.
+        const setupPlayerTurnWithLini = () => {
+            const allFoursQueue = Array<number>(40).fill(4)
+            const engine = new MissionEngineTestHarness(new RollGenerator(allFoursQueue))
+            engine.transitionToNextPhase()
+            engine.transitionToNextPhase()
+            const context: CommandContext = {
+                selectedSquaddieId: engine.getLiniSquaddieId(),
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+            }
+            return { engine, context }
+        }
+
+        // Drain non-player turns until PLAYER_TURN returns.
+        const drainNonPlayerTurns = (engine: MissionEngineTestHarness) => {
+            for (let i = 0; i < 20; i++) {
+                if (
+                    engine.getCurrentAffiliationTurn() ===
+                    MissionAffiliationTurn.PLAYER_TURN
+                )
+                    break
+                if (engine.getReadiedAction() != undefined) {
+                    engine.useActionAndGetResults()
+                } else {
+                    engine.transitionToNextPhase()
+                }
+            }
+        }
+
+        it("returns undoAction with no-engine message when engine is undefined", () => {
+            const result = processCommand("Z")
+            expect(result.action).toBe("undoAction")
+            expect(result.message).toContain("No engine available")
+        })
+
+        it("returns undoAction with no-action-to-undo message on a fresh engine", () => {
+            const { engine } = setupPlayerTurnWithLini()
+            const result = processCommand("Z", engine)
+            expect(result.action).toBe("undoAction")
+            expect(result.message).toContain("no action to undo")
+        })
+
+        it("successfully undoes a movement and returns message with action name", () => {
+            const { engine, context } = setupPlayerTurnWithLini()
+
+            // Move Lini one tile.
+            const selectResult = processCommand("AM", engine, context)
+            processCommand("0, 1", engine, selectResult.updatedContext!)
+
+            // Undo the movement.
+            const result = processCommand("Z", engine)
+            expect(result.action).toBe("undoAction")
+            expect(result.message).toContain("Undid: Move")
+        })
+
+        it("resets context to BROWSING after a successful undo", () => {
+            const { engine, context } = setupPlayerTurnWithLini()
+
+            const selectResult = processCommand("AM", engine, context)
+            processCommand("0, 1", engine, selectResult.updatedContext!)
+
+            const result = processCommand("Z", engine)
+            expect(result.updatedContext?.interactionPhase).toBe(
+                InteractionPhase.BROWSING
+            )
+            expect(result.updatedContext?.selectedSquaddieId).toBeUndefined()
+            expect(result.updatedContext?.actingSquaddieId).toBeUndefined()
+        })
+
+        it("returns cannot-undo message after executing a combat action against an enemy", () => {
+            const { engine, context } = setupPlayerTurnWithLini()
+            const liniId = engine.getLiniSquaddieId()
+
+            // Move Lini adjacent to the Slither Demon and end her turn.
+            engine.readyAction({
+                actor: liniId,
+                targets: [liniId],
+                action: {
+                    id: "default-move",
+                    decisions: { desiredMovementDestination: { row: 2, col: 2 } },
+                },
+            })
+            engine.useActionAndGetResults()
+            engine.endSquaddieTurn(liniId)
+
+            // Let the enemy act and return to PLAYER_TURN.
+            drainNonPlayerTurns(engine)
+
+            // Execute Scimitar (A3 from the adjacent position).
+            const selectResult = processCommand("A3", engine, context)
+            const confirmingContext = selectResult.updatedContext!
+            processCommand("Y", engine, confirmingContext)
+
+            // Undo should fail for a combat action.
+            const result = processCommand("Z", engine)
+            expect(result.action).toBe("undoAction")
+            expect(result.message).toContain("action cannot be undone")
+        })
+    })
 })

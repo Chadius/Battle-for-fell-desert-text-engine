@@ -38,6 +38,7 @@ export type CommandAction =
     | "moveSquaddie"
     | "executeAction"
     | "cancelAction"
+    | "undoAction"
 
 export interface CommandContext {
     selectedSquaddieId: BattleSquaddieId | undefined
@@ -88,6 +89,10 @@ export const processCommand = (
         return handleShowObjectives(engine)
     }
 
+    if (normalizedInput === "Z") {
+        return handleUndoAction(engine)
+    }
+
     if (context?.interactionPhase === InteractionPhase.CONFIRMING_ACTION) {
         return handleActionConfirmation(normalizedInput, engine, context)
     }
@@ -124,7 +129,7 @@ const handleShowCommands = (context?: CommandContext): CommandResult => {
         commandList.push("L - Look at selected squaddie", "A - Select action")
     }
 
-    commandList.push("Q - Quit the game", "? - Show all commands")
+    commandList.push("Z - Undo last action", "Q - Quit the game", "? - Show all commands")
 
     return { action: "showCommands", message: commandList.join("\n") }
 }
@@ -896,6 +901,37 @@ const handleMovementTargetSelection = (
     return {
         action: "moveSquaddie",
         message,
+        updatedContext: {
+            selectedSquaddieId: undefined,
+            interactionPhase: InteractionPhase.BROWSING,
+            actingSquaddieId: undefined,
+            pendingActionId: undefined,
+        },
+    }
+}
+
+// Handles the Z command: undo the last player-undoable action.
+const handleUndoAction = (engine: MissionEngine | undefined): CommandResult => {
+    if (engine == undefined) {
+        return {
+            action: "undoAction",
+            message: "[handleUndoAction] No engine available.",
+        }
+    }
+
+    const result = engine.undoLastPlayerUndoableAction()
+
+    if (!result.success) {
+        return {
+            action: "undoAction",
+            message: `Cannot undo: ${result.reason}.`,
+        }
+    }
+
+    const actionName = result.removedAction!.action.name
+    return {
+        action: "undoAction",
+        message: `Undid: ${actionName}.`,
         updatedContext: {
             selectedSquaddieId: undefined,
             interactionPhase: InteractionPhase.BROWSING,

@@ -191,7 +191,7 @@ moving, attacking, seeing results, watching enemies act, and receiving a win or 
 - Add `VIEWING_RESULTS` phase after execution completes so the player can review the outcome
   before the context clears.
 
-### Phase 4 — Undo
+### Phase 4 — Undo (DONE)
 
 **Goal:** The player can reverse their last action.
 
