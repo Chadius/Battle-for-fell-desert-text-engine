@@ -8,6 +8,9 @@ import {SquaddieActionService} from "../logic/src/squaddieAction/squaddieAction.
 import {MissionEngineTestHarness} from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
 import {DegreeOfSuccess} from "../logic/src/degreesOfSuccess/degreeOfSuccess.js"
 import type {SerializedForecastedActionResult} from "../logic/src/squaddieAction/calculate/result/squaddieActionResultCalculator.js"
+import {RollGenerator} from "../logic/src/squaddieAction/calculate/roll/rollGenerator.js"
+import {MissionAffiliationTurn} from "../logic/src/mission/missionTurn.js"
+import {MissionEngineTestHarnessIds} from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
 import {
     SquaddieConditionDecaysAt,
     SquaddieConditionService,
@@ -500,6 +503,117 @@ describe("squaddieActionInspector", () => {
             const result = SquaddieActionInspector.formatForecast(forecasts, "Lini")
             expect(result).toContain("gains ARMOR 1 for 2 turns")
             expect(result).not.toContain("no effect")
+        })
+
+        it("shows no modifier breakdown when modifierBreakdown is absent", () => {
+            const engine = new MissionEngineTestHarness()
+            const liniId = engine.getLiniSquaddieId()
+
+            const forecasts: SerializedForecastedActionResult[] = [
+                {
+                    battleSquaddieId: liniId,
+                    degreeOfSuccess: DegreeOfSuccess.SUCCESS,
+                    chanceOutOf36: 21,
+                    squaddieActionResults: [],
+                },
+            ]
+
+            const result = SquaddieActionInspector.formatForecast(forecasts, "Lini")
+            expect(result).not.toContain("Attack modifier")
+        })
+
+        it("engine populates modifierBreakdown and does not show modifier line when MAP is 0", () => {
+            const allFours = Array<number>(40).fill(4)
+            const engine = new MissionEngineTestHarness(new RollGenerator(allFours))
+            const liniId = engine.getLiniSquaddieId()
+            const slitherDemonId = engine.getSlitherDemonSquaddieId()
+
+            engine.transitionToNextPhase()
+            engine.transitionToNextPhase()
+
+            engine.readyAction({
+                actor: liniId,
+                targets: [liniId],
+                action: {
+                    id: "default-move",
+                    decisions: { desiredMovementDestination: { row: 2, col: 2 } },
+                },
+            })
+            engine.useActionAndGetResults()
+            engine.endSquaddieTurn(liniId)
+
+            for (let i = 0; i < 20; i++) {
+                if (
+                    engine.getCurrentAffiliationTurn() ===
+                    MissionAffiliationTurn.PLAYER_TURN
+                )
+                    break
+                if (engine.getReadiedAction() != undefined) {
+                    engine.useActionAndGetResults()
+                } else {
+                    engine.transitionToNextPhase()
+                }
+            }
+
+            engine.readyAction({
+                actor: liniId,
+                targets: [slitherDemonId],
+                action: { id: MissionEngineTestHarnessIds.lini.scimitarActionId },
+            })
+
+            const forecasts = engine.previewReadiedActionAndForecastResults()
+            expect(forecasts.some((f) => f.modifierBreakdown != undefined)).toBe(true)
+
+            const result = SquaddieActionInspector.formatForecast(forecasts, "Slither Demon")
+            expect(result).not.toContain("Attack modifier:")
+        })
+
+        it("formatter shows MAP -3 when multipleAttackPenalty is 3", () => {
+            const engine = new MissionEngineTestHarness()
+            const liniId = engine.getLiniSquaddieId()
+
+            const forecasts: SerializedForecastedActionResult[] = [
+                {
+                    battleSquaddieId: liniId,
+                    degreeOfSuccess: DegreeOfSuccess.SUCCESS,
+                    chanceOutOf36: 15,
+                    squaddieActionResults: [],
+                    modifierBreakdown: {
+                        actorProficiencyBonus: 3,
+                        targetDefensiveBonus: 1,
+                        multipleAttackPenalty: 3,
+                        netModifier: -1,
+                    },
+                },
+            ]
+
+            const result = SquaddieActionInspector.formatForecast(forecasts, "Slither Demon")
+            expect(result).toContain("MAP -3")
+            expect(result).toContain("Attack modifier:")
+        })
+
+        it("formatter shows MAP -6 when multipleAttackPenalty is 6", () => {
+            const engine = new MissionEngineTestHarness()
+            const liniId = engine.getLiniSquaddieId()
+
+            const forecasts: SerializedForecastedActionResult[] = [
+                {
+                    battleSquaddieId: liniId,
+                    degreeOfSuccess: DegreeOfSuccess.SUCCESS,
+                    chanceOutOf36: 10,
+                    squaddieActionResults: [],
+                    modifierBreakdown: {
+                        actorProficiencyBonus: 3,
+                        targetDefensiveBonus: 1,
+                        multipleAttackPenalty: 6,
+                        netModifier: -4,
+                    },
+                },
+            ]
+
+            const result = SquaddieActionInspector.formatForecast(forecasts, "Slither Demon")
+            expect(result).toContain("MAP -6")
+            expect(result).toContain("Attack modifier:")
         })
     })
 })

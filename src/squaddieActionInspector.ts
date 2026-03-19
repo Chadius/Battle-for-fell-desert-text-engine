@@ -3,7 +3,10 @@ import type {
     SquaddieAction,
 } from "../logic/src/squaddieAction/squaddieAction.js"
 import type { SquaddieActionValidity } from "../logic/src/squaddieAction/calculate/validity/squaddieActionValidationService.js"
-import type { SerializedForecastedActionResult } from "../logic/src/squaddieAction/calculate/result/squaddieActionResultCalculator.js"
+import type {
+    ActionModifierBreakdown,
+    SerializedForecastedActionResult,
+} from "../logic/src/squaddieAction/calculate/result/squaddieActionResultCalculator.js"
 import type { TDegreeOfSuccess } from "../logic/src/degreesOfSuccess/degreeOfSuccess.js"
 
 export const SquaddieActionInspector = {
@@ -148,11 +151,47 @@ const formatDegreeLabel = (degree: TDegreeOfSuccess): string => {
     return degree
 }
 
+const formatModifierBreakdown = (
+    breakdown: ActionModifierBreakdown
+): string => {
+    const { actorProficiencyBonus, targetDefensiveBonus, multipleAttackPenalty, netModifier } =
+        breakdown
+
+    const proficiencyStr =
+        actorProficiencyBonus === 0
+            ? "proficiency ±0"
+            : `proficiency ${actorProficiencyBonus >= 0 ? "+" : ""}${actorProficiencyBonus}`
+    const defenseStr =
+        targetDefensiveBonus === 0
+            ? "defense ±0"
+            : `defense -${targetDefensiveBonus}`
+    const mapStr =
+        multipleAttackPenalty === 0
+            ? "MAP ±0"
+            : `MAP -${multipleAttackPenalty}`
+
+    const netStr =
+        netModifier === 0
+            ? "±0"
+            : `${netModifier >= 0 ? "+" : ""}${netModifier}`
+    return `  Attack modifier: ${netStr} (${proficiencyStr}, ${defenseStr}, ${mapStr})`
+}
+
 const formatForecast = (
     forecasts: SerializedForecastedActionResult[],
     targetName: string
 ): string => {
     const lines: string[] = [`Forecast for ${targetName}:`]
+
+    // Display modifier breakdown only when MAP is active (penalty > 0)
+    const firstWithMapPenalty = forecasts.find(
+        (f) =>
+            f.modifierBreakdown != undefined &&
+            f.modifierBreakdown.multipleAttackPenalty > 0
+    )
+    if (firstWithMapPenalty?.modifierBreakdown != undefined) {
+        lines.push(formatModifierBreakdown(firstWithMapPenalty.modifierBreakdown))
+    }
 
     for (const forecast of forecasts) {
         const chance = `${forecast.chanceOutOf36}/36`
