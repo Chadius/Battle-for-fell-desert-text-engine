@@ -174,6 +174,7 @@ const handleShowMap = (engine?: MissionEngine): CommandResult => {
     }
 
     const overview = engine.getMapOverview()
+    const summary = engine.getSerializedInMissionSummary()
 
     const turnNumber = engine.getCurrentTurnNumber()
     const affiliationTurn = engine.getCurrentAffiliationTurn()
@@ -192,6 +193,7 @@ const handleShowMap = (engine?: MissionEngine): CommandResult => {
         squaddieAffiliations,
         objectivesDisplay:
             objectivesDisplay.length > 0 ? objectivesDisplay : undefined,
+        mapName: summary.mapName,
     }
 
     return { action: "showMap", message: renderMap(overview, renderInfo) }

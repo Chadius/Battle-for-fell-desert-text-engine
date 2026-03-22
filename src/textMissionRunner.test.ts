@@ -21,6 +21,12 @@ describe("TextMissionRunner", () => {
             const runner = new TextMissionRunner(engine)
             expect(runner.getWelcomeText()).toContain("Objective:")
         })
+
+        it("includes the map name from the engine", () => {
+            const engine = new MissionEngineTestHarness()
+            const runner = new TextMissionRunner(engine)
+            expect(runner.getWelcomeText()).toContain("Map: Test Harness Map")
+        })
     })
 
     describe("processInput", () => {
@@ -37,7 +43,7 @@ describe("TextMissionRunner", () => {
             const runner = new TextMissionRunner(engine)
             const result = runner.processInput("M")
             expect(result.shouldQuit).toBe(false)
-            expect(result.text).toContain("Map:")
+            expect(result.text).toContain("Test Harness Map")
         })
 
         it("updates internal context when a coordinate with a squaddie is inspected, allowing L to show details", () => {

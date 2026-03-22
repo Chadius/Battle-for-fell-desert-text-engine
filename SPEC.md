@@ -233,4 +233,4 @@ This phase requires additions to the `logic` submodule:
 - Show conditions and their remaining duration in the squaddie detail view.
 - Add a `help` or `?` command that also explains the turn flow and the objective win/loss
   conditions.
-- Ensure the test harness map name is displayed when rendering the map.
+- Ensure the test harness map name is displayed when rendering the map. (DONE)

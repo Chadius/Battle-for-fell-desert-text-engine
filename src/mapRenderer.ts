@@ -10,6 +10,7 @@ export interface MapRenderInfo {
     squaddieAffiliations: Map<string, TSquaddieAffiliation>
     objectivesDisplay?: string
     tileOverlays?: Map<string, string>
+    mapName?: string
 }
 
 export const affiliationDisplayName = (
@@ -229,7 +230,11 @@ export const renderMap = (
         allLines.push(renderTurnHeader(renderInfo))
     }
 
-    const header = `Map: ${overview.width} columns x ${overview.height} rows`
+    // Show map name in header if provided, otherwise fall back to dimension-only format
+    const header =
+        renderInfo?.mapName != undefined
+            ? `${renderInfo.mapName} (${overview.width} columns x ${overview.height} rows)`
+            : `Map: ${overview.width} columns x ${overview.height} rows`
     const gridLines = renderGridLines(overview, squaddieLabels, renderInfo)
     const legend = renderLegend()
     const squaddieList = renderSquaddieList(overview, squaddieLabels, renderInfo)

@@ -41,9 +41,11 @@ export class TextMissionRunner {
     }
 
     getWelcomeText(): string {
+        const summary = this.engine.getSerializedInMissionSummary()
         const lines: string[] = [
             "Battle of Fell Desert CLI",
             "=========================",
+            `Map: ${summary.mapName}`,
             "Game engine initialized.",
             "Enter 'Q' to quit, '?' for commands.",
         ]

@@ -767,5 +767,33 @@ describe("mapRenderer", () => {
             const output = renderMap(overview)
             expect(output).not.toContain("Squaddies:")
         })
+
+        it("shows map name in header when renderInfo includes mapName", () => {
+            const overview: MapOverview = {
+                width: 1,
+                height: 1,
+                tiles: [
+                    [
+                        {
+                            row: 0,
+                            col: 0,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: undefined,
+                        },
+                    ],
+                ],
+            }
+            const renderInfo: MapRenderInfo = {
+                turnNumber: 0,
+                currentAffiliation: SquaddieAffiliation.PLAYER,
+                squaddieAffiliations: new Map(),
+                mapName: "Test Map",
+            }
+
+            const output = renderMap(overview, renderInfo)
+            expect(output).toContain("Test Map (1 columns x 1 rows)")
+            expect(output).not.toContain("Map: 1 columns x 1 rows")
+        })
     })
 })

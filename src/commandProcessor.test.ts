@@ -306,21 +306,21 @@ describe("processCommand", () => {
             const engine = new MissionEngineTestHarness()
             const result = processCommand("M", engine)
             expect(result.action).toBe("showMap")
-            expect(result.message).toContain("Map:")
+            expect(result.message).toContain("Test Harness Map")
         })
 
         it("returns showMap when input is lowercase m", () => {
             const engine = new MissionEngineTestHarness()
             const result = processCommand("m", engine)
             expect(result.action).toBe("showMap")
-            expect(result.message).toContain("Map:")
+            expect(result.message).toContain("Test Harness Map")
         })
 
         it("returns showMap when input has surrounding whitespace", () => {
             const engine = new MissionEngineTestHarness()
             const result = processCommand("  M  ", engine)
             expect(result.action).toBe("showMap")
-            expect(result.message).toContain("Map:")
+            expect(result.message).toContain("Test Harness Map")
         })
 
         it("returns an error message when engine is undefined", () => {
