@@ -5,12 +5,11 @@ import type {
 } from "../logic/src/squaddieAction/calculate/validity/squaddieActionValidationService.js"
 import type {SquaddieAction} from "../logic/src/squaddieAction/squaddieAction.js"
 import {SquaddieActionService} from "../logic/src/squaddieAction/squaddieAction.js"
-import {MissionEngineTestHarness} from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
 import {DegreeOfSuccess} from "../logic/src/degreesOfSuccess/degreeOfSuccess.js"
 import type {SerializedForecastedActionResult} from "../logic/src/squaddieAction/calculate/result/squaddieActionResultCalculator.js"
 import {RollGenerator} from "../logic/src/squaddieAction/calculate/roll/rollGenerator.js"
 import {MissionAffiliationTurn} from "../logic/src/mission/missionTurn.js"
-import {MissionEngineTestHarnessIds} from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
+import { createSimplePlayerVsEnemyMission, SimpleTestMissionIds } from "./testUtils/simpleTestMission.js"
 import {
     SquaddieConditionDecaysAt,
     SquaddieConditionService,
@@ -196,8 +195,7 @@ describe("squaddieActionInspector", () => {
         })
 
         it("formats actions from the test harness engine", () => {
-            const engine = new MissionEngineTestHarness()
-            const liniSquaddieId = engine.getLiniSquaddieId()
+            const { engine, playerSquaddieId: liniSquaddieId } = createSimplePlayerVsEnemyMission()
             const validity =
                 engine.getSquaddieActionValidity(liniSquaddieId)
 
@@ -442,8 +440,7 @@ describe("squaddieActionInspector", () => {
         })
 
         it("uses the test harness engine to show Lini's actions with A1/A2 keys", () => {
-            const engine = new MissionEngineTestHarness()
-            const liniId = engine.getLiniSquaddieId()
+            const { engine, playerSquaddieId: liniId } = createSimplePlayerVsEnemyMission()
             const validity = engine.getSquaddieActionValidity(liniId)
 
             const actionsById = new Map<string, SquaddieAction>()
@@ -472,8 +469,7 @@ describe("squaddieActionInspector", () => {
 
     describe("formatForecast", () => {
         it("shows condition added in forecast effect description", () => {
-            const engine = new MissionEngineTestHarness()
-            const liniId = engine.getLiniSquaddieId()
+            const { playerSquaddieId: liniId } = createSimplePlayerVsEnemyMission()
 
             const forecasts: SerializedForecastedActionResult[] = [
                 {
@@ -506,8 +502,7 @@ describe("squaddieActionInspector", () => {
         })
 
         it("shows no modifier breakdown when modifierBreakdown is absent", () => {
-            const engine = new MissionEngineTestHarness()
-            const liniId = engine.getLiniSquaddieId()
+            const { playerSquaddieId: liniId } = createSimplePlayerVsEnemyMission()
 
             const forecasts: SerializedForecastedActionResult[] = [
                 {
@@ -524,9 +519,7 @@ describe("squaddieActionInspector", () => {
 
         it("engine populates modifierBreakdown and does not show modifier line when MAP is 0", () => {
             const allFours = Array<number>(40).fill(4)
-            const engine = new MissionEngineTestHarness(new RollGenerator(allFours))
-            const liniId = engine.getLiniSquaddieId()
-            const slitherDemonId = engine.getSlitherDemonSquaddieId()
+            const { engine, playerSquaddieId: liniId, enemySquaddieId: slitherDemonId } = createSimplePlayerVsEnemyMission(new RollGenerator(allFours))
 
             engine.transitionToNextPhase()
             engine.transitionToNextPhase()
@@ -558,7 +551,7 @@ describe("squaddieActionInspector", () => {
             engine.readyAction({
                 actor: liniId,
                 targets: [slitherDemonId],
-                action: { id: MissionEngineTestHarnessIds.lini.scimitarActionId },
+                action: { id: SimpleTestMissionIds.player.meleeActionId },
             })
 
             const forecasts = engine.previewReadiedActionAndForecastResults()
@@ -569,8 +562,7 @@ describe("squaddieActionInspector", () => {
         })
 
         it("formatter shows MAP -3 when multipleAttackPenalty is 3", () => {
-            const engine = new MissionEngineTestHarness()
-            const liniId = engine.getLiniSquaddieId()
+            const { playerSquaddieId: liniId } = createSimplePlayerVsEnemyMission()
 
             const forecasts: SerializedForecastedActionResult[] = [
                 {
@@ -593,8 +585,7 @@ describe("squaddieActionInspector", () => {
         })
 
         it("formatter shows MAP -6 when multipleAttackPenalty is 6", () => {
-            const engine = new MissionEngineTestHarness()
-            const liniId = engine.getLiniSquaddieId()
+            const { playerSquaddieId: liniId } = createSimplePlayerVsEnemyMission()
 
             const forecasts: SerializedForecastedActionResult[] = [
                 {

@@ -5,11 +5,14 @@ import {
     transitionToNextPhase,
 } from "./commandProcessor.js"
 import type { CommandContext } from "./commandProcessor.js"
-import { MissionEngineTestHarness } from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
 import { MissionAffiliationTurn } from "../logic/src/mission/missionTurn.js"
 import { RollGenerator } from "../logic/src/squaddieAction/calculate/roll/rollGenerator.js"
 import { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
-import { createTargetPracticeMission } from "../logic/src/testUtils/mission/targetPracticeMission.js"
+import {
+    createSimplePlayerVsEnemyMission,
+    createLineActionMission,
+    SimpleTestMissionIds,
+} from "./testUtils/simpleTestMission.js"
 
 describe("processCommand", () => {
     describe("quit action", () => {
@@ -63,9 +66,9 @@ describe("processCommand", () => {
         })
 
         it("shows L command when a squaddie is selected", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine, playerSquaddieId } = createSimplePlayerVsEnemyMission()
             const context: CommandContext = {
-                selectedSquaddieId: engine.getLiniSquaddieId(),
+                selectedSquaddieId: playerSquaddieId,
                 interactionPhase: InteractionPhase.BROWSING,
                 actingSquaddieId: undefined,
             }
@@ -99,7 +102,7 @@ describe("processCommand", () => {
         })
 
         it("shows objective summary in help text when engine is provided", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("?", engine)
             expect(result.message).toContain("Defeat")
         })
@@ -107,14 +110,14 @@ describe("processCommand", () => {
 
     describe("inspectCoordinate action", () => {
         it("returns terrain info for a valid coordinate", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("0, 1", engine)
             expect(result.action).toBe("inspectCoordinate")
             expect(result.message).toContain("(0,1): Standard")
         })
 
         it("returns off-map message for an out-of-bounds coordinate", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("10, 10", engine)
             expect(result.action).toBe("inspectCoordinate")
             expect(result.message).toContain("is off map")
@@ -135,11 +138,11 @@ describe("processCommand", () => {
         })
 
         it("sets updatedContext with squaddieId when a squaddie is at the coordinate", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine, playerSquaddieId } = createSimplePlayerVsEnemyMission()
             const result = processCommand("0, 0", engine)
             expect(result.updatedContext).toBeDefined()
             expect(result.updatedContext!.selectedSquaddieId).toEqual(
-                engine.getLiniSquaddieId()
+                playerSquaddieId
             )
             expect(result.updatedContext!.interactionPhase).toBe(
                 InteractionPhase.BROWSING
@@ -148,7 +151,7 @@ describe("processCommand", () => {
         })
 
         it("clears updatedContext when no squaddie is at the coordinate", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("2, 2", engine)
             expect(result.updatedContext).toBeDefined()
             expect(result.updatedContext!.selectedSquaddieId).toBeUndefined()
@@ -159,7 +162,7 @@ describe("processCommand", () => {
         })
 
         it("clears updatedContext for off-map coordinates", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("10, 10", engine)
             expect(result.updatedContext).toBeDefined()
             expect(result.updatedContext!.selectedSquaddieId).toBeUndefined()
@@ -172,9 +175,9 @@ describe("processCommand", () => {
 
     describe("lookAtSquaddie action", () => {
         it("returns squaddie details when a squaddie is selected", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine, playerSquaddieId } = createSimplePlayerVsEnemyMission()
             const context: CommandContext = {
-                selectedSquaddieId: engine.getLiniSquaddieId(),
+                selectedSquaddieId: playerSquaddieId,
                 interactionPhase: InteractionPhase.BROWSING,
                 actingSquaddieId: undefined,
             }
@@ -184,7 +187,7 @@ describe("processCommand", () => {
         })
 
         it("returns error when no squaddie is selected", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("L", engine)
             expect(result.action).toBe("lookAtSquaddie")
             expect(result.message).toBe(
@@ -209,9 +212,9 @@ describe("processCommand", () => {
         })
 
         it("is case-insensitive", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine, playerSquaddieId } = createSimplePlayerVsEnemyMission()
             const context: CommandContext = {
-                selectedSquaddieId: engine.getLiniSquaddieId(),
+                selectedSquaddieId: playerSquaddieId,
                 interactionPhase: InteractionPhase.BROWSING,
                 actingSquaddieId: undefined,
             }
@@ -221,9 +224,9 @@ describe("processCommand", () => {
         })
 
         it("handles surrounding whitespace", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine, playerSquaddieId } = createSimplePlayerVsEnemyMission()
             const context: CommandContext = {
-                selectedSquaddieId: engine.getLiniSquaddieId(),
+                selectedSquaddieId: playerSquaddieId,
                 interactionPhase: InteractionPhase.BROWSING,
                 actingSquaddieId: undefined,
             }
@@ -233,9 +236,9 @@ describe("processCommand", () => {
         })
 
         it("shows squaddie name and affiliation", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine, playerSquaddieId } = createSimplePlayerVsEnemyMission()
             const context: CommandContext = {
-                selectedSquaddieId: engine.getLiniSquaddieId(),
+                selectedSquaddieId: playerSquaddieId,
                 interactionPhase: InteractionPhase.BROWSING,
                 actingSquaddieId: undefined,
             }
@@ -245,9 +248,9 @@ describe("processCommand", () => {
         })
 
         it("shows hit points and action points", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine, playerSquaddieId } = createSimplePlayerVsEnemyMission()
             const context: CommandContext = {
-                selectedSquaddieId: engine.getLiniSquaddieId(),
+                selectedSquaddieId: playerSquaddieId,
                 interactionPhase: InteractionPhase.BROWSING,
                 actingSquaddieId: undefined,
             }
@@ -257,9 +260,9 @@ describe("processCommand", () => {
         })
 
         it("does not show conditions section when squaddie has no conditions", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine, playerSquaddieId } = createSimplePlayerVsEnemyMission()
             const context: CommandContext = {
-                selectedSquaddieId: engine.getLiniSquaddieId(),
+                selectedSquaddieId: playerSquaddieId,
                 interactionPhase: InteractionPhase.BROWSING,
                 actingSquaddieId: undefined,
             }
@@ -268,9 +271,9 @@ describe("processCommand", () => {
         })
 
         it("shows actions section with valid and invalid actions", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine, playerSquaddieId } = createSimplePlayerVsEnemyMission()
             const context: CommandContext = {
-                selectedSquaddieId: engine.getLiniSquaddieId(),
+                selectedSquaddieId: playerSquaddieId,
                 interactionPhase: InteractionPhase.BROWSING,
                 actingSquaddieId: undefined,
             }
@@ -279,9 +282,9 @@ describe("processCommand", () => {
         })
 
         it("shows End Turn and Move as valid actions", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine, playerSquaddieId } = createSimplePlayerVsEnemyMission()
             const context: CommandContext = {
-                selectedSquaddieId: engine.getLiniSquaddieId(),
+                selectedSquaddieId: playerSquaddieId,
                 interactionPhase: InteractionPhase.BROWSING,
                 actingSquaddieId: undefined,
             }
@@ -291,9 +294,9 @@ describe("processCommand", () => {
         })
 
         it("shows Scimitar as invalid when no foes in range", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine, playerSquaddieId } = createSimplePlayerVsEnemyMission()
             const context: CommandContext = {
-                selectedSquaddieId: engine.getLiniSquaddieId(),
+                selectedSquaddieId: playerSquaddieId,
                 interactionPhase: InteractionPhase.BROWSING,
                 actingSquaddieId: undefined,
             }
@@ -305,21 +308,21 @@ describe("processCommand", () => {
 
     describe("showMap action", () => {
         it("returns showMap when input is M", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("M", engine)
             expect(result.action).toBe("showMap")
             expect(result.message).toContain("Test Harness Map")
         })
 
         it("returns showMap when input is lowercase m", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("m", engine)
             expect(result.action).toBe("showMap")
             expect(result.message).toContain("Test Harness Map")
         })
 
         it("returns showMap when input has surrounding whitespace", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("  M  ", engine)
             expect(result.action).toBe("showMap")
             expect(result.message).toContain("Test Harness Map")
@@ -334,7 +337,7 @@ describe("processCommand", () => {
         })
 
         it("renders the test harness map with squaddies", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("M", engine)
             expect(result.message).toContain("5 columns x 4 rows")
             expect(result.message).toContain("lini")
@@ -342,13 +345,13 @@ describe("processCommand", () => {
         })
 
         it("includes turn header in map output", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("M", engine)
             expect(result.message).toContain("Turn 0")
         })
 
         it("groups squaddies by affiliation in map output", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("M", engine)
             expect(result.message).toContain("  Player:")
             expect(result.message).toContain("    L = lini")
@@ -357,7 +360,7 @@ describe("processCommand", () => {
         })
 
         it("includes objectives in map output", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("M", engine)
             expect(result.message).toContain("Objective:")
             expect(result.message).toContain("- Defeat enemy:")
@@ -368,19 +371,19 @@ describe("processCommand", () => {
 
     describe("showObjectives action", () => {
         it("returns showObjectives action for O command", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("O", engine)
             expect(result.action).toBe("showObjectives")
         })
 
         it("is case-insensitive", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("o", engine)
             expect(result.action).toBe("showObjectives")
         })
 
         it("handles surrounding whitespace", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("  O  ", engine)
             expect(result.action).toBe("showObjectives")
         })
@@ -394,7 +397,7 @@ describe("processCommand", () => {
         })
 
         it("shows objectives and failure conditions", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("O", engine)
             expect(result.message).toContain("Objective:")
             expect(result.message).toContain("- Defeat enemy:")
@@ -405,19 +408,19 @@ describe("processCommand", () => {
 
     describe("listControllableSquaddies action", () => {
         it("returns listControllableSquaddies for W command", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("W", engine)
             expect(result.action).toBe("listControllableSquaddies")
         })
 
         it("is case-insensitive", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("w", engine)
             expect(result.action).toBe("listControllableSquaddies")
         })
 
         it("handles surrounding whitespace", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("  W  ", engine)
             expect(result.action).toBe("listControllableSquaddies")
         })
@@ -431,7 +434,7 @@ describe("processCommand", () => {
         })
 
         it("lists squaddies who can act during PLAYER_TURN", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             engine.transitionToNextPhase()
             engine.transitionToNextPhase()
 
@@ -441,7 +444,7 @@ describe("processCommand", () => {
         })
 
         it("shows no squaddies message during TURN_START", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("W", engine)
             expect(result.message).toBe(
                 "No squaddies can act this phase."
@@ -451,20 +454,20 @@ describe("processCommand", () => {
 
     describe("transitionToNextPhase", () => {
         it("returns current phase after transition from TURN_START", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = transitionToNextPhase(engine)
             expect(result).toBe(MissionAffiliationTurn.PLAYER_TURN_START)
         })
 
         it("returns PLAYER_TURN after two transitions from TURN_START", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             transitionToNextPhase(engine)
             const result = transitionToNextPhase(engine)
             expect(result).toBe(MissionAffiliationTurn.PLAYER_TURN)
         })
 
         it("stays at PLAYER_TURN when squaddies can still act", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             transitionToNextPhase(engine)
             transitionToNextPhase(engine)
             const result = transitionToNextPhase(engine)
@@ -474,11 +477,11 @@ describe("processCommand", () => {
 
     describe("selectAction action", () => {
         const setupPlayerTurnWithLini = () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine, playerSquaddieId } = createSimplePlayerVsEnemyMission()
             engine.transitionToNextPhase()
             engine.transitionToNextPhase()
             const context: CommandContext = {
-                selectedSquaddieId: engine.getLiniSquaddieId(),
+                selectedSquaddieId: playerSquaddieId,
                 interactionPhase: InteractionPhase.BROWSING,
                 actingSquaddieId: undefined,
             }
@@ -511,7 +514,7 @@ describe("processCommand", () => {
             })
 
             it("returns error when no squaddie is selected", () => {
-                const engine = new MissionEngineTestHarness()
+                const { engine } = createSimplePlayerVsEnemyMission()
                 const result = processCommand("A", engine)
                 expect(result.action).toBe("selectAction")
                 expect(result.message).toBe(
@@ -597,7 +600,7 @@ describe("processCommand", () => {
             })
 
             it("returns error when no squaddie is selected", () => {
-                const engine = new MissionEngineTestHarness()
+                const { engine } = createSimplePlayerVsEnemyMission()
                 const result = processCommand("AE", engine)
                 expect(result.action).toBe("selectAction")
                 expect(result.message).toBe(
@@ -608,9 +611,9 @@ describe("processCommand", () => {
 
         describe("help text for A command", () => {
             it("shows A command when a squaddie is selected", () => {
-                const engine = new MissionEngineTestHarness()
+                const { engine, playerSquaddieId } = createSimplePlayerVsEnemyMission()
                 const context: CommandContext = {
-                    selectedSquaddieId: engine.getLiniSquaddieId(),
+                    selectedSquaddieId: playerSquaddieId,
                     interactionPhase: InteractionPhase.BROWSING,
                     actingSquaddieId: undefined,
                 }
@@ -627,11 +630,11 @@ describe("processCommand", () => {
 
     describe("AM — movement command", () => {
         const setupPlayerTurnWithLini = () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine, playerSquaddieId } = createSimplePlayerVsEnemyMission()
             engine.transitionToNextPhase()
             engine.transitionToNextPhase()
             const context: CommandContext = {
-                selectedSquaddieId: engine.getLiniSquaddieId(),
+                selectedSquaddieId: playerSquaddieId,
                 interactionPhase: InteractionPhase.BROWSING,
                 actingSquaddieId: undefined,
             }
@@ -639,7 +642,7 @@ describe("processCommand", () => {
         }
 
         it("returns error when no squaddie is selected", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             engine.transitionToNextPhase()
             engine.transitionToNextPhase()
             const result = processCommand("AM", engine)
@@ -722,7 +725,7 @@ describe("processCommand", () => {
             const moveResult = processCommand("0, 1", engine, targetContext)
             expect(moveResult.message).toMatch(/spending [1-9]\d* AP/)
             expect(moveResult.message).toMatch(/\d+ remaining/)
-            const {currentActionPoints} = engine.getSquaddieInfo(engine.getLiniSquaddieId())
+            const {currentActionPoints} = engine.getSquaddieInfo(context.selectedSquaddieId!)
             expect(currentActionPoints).toBe(2)
         })
 
@@ -743,13 +746,13 @@ describe("processCommand", () => {
             const targetContext = selectResult.updatedContext!
 
             processCommand("0, 1", engine, targetContext)
-            const liniPos = engine.getSquaddiePosition(engine.getLiniSquaddieId())
+            const liniPos = engine.getSquaddiePosition(context.selectedSquaddieId!)
             expect(liniPos).toEqual(expect.objectContaining({ row: 0, col: 1 }))
         })
 
         it("movement overlay does not show destinations that cost more AP than available", () => {
             const { engine, context } = setupPlayerTurnWithLini()
-            const { currentActionPoints } = engine.getSquaddieInfo(engine.getLiniSquaddieId())
+            const { currentActionPoints } = engine.getSquaddieInfo(context.selectedSquaddieId!)
 
             const result = processCommand("AM", engine, context)
 
@@ -762,11 +765,9 @@ describe("processCommand", () => {
         })
 
         it("shows the engine rejection message and returns to BROWSING when readyAction is invalid", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine, enemySquaddieId: slitherDemonId } = createSimplePlayerVsEnemyMission()
             engine.transitionToNextPhase()
             engine.transitionToNextPhase()
-
-            const slitherDemonId = engine.getSlitherDemonSquaddieId()
             const validity = engine.getSquaddieActionValidity(slitherDemonId)
             const moveAction = validity.validActions.find(
                 (a) => a.actionId === "default-move"
@@ -801,19 +802,19 @@ describe("processCommand", () => {
 
     describe("showPhase action", () => {
         it("returns showPhase action for P command", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("P", engine)
             expect(result.action).toBe("showPhase")
         })
 
         it("is case-insensitive", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("p", engine)
             expect(result.action).toBe("showPhase")
         })
 
         it("handles surrounding whitespace", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("  P  ", engine)
             expect(result.action).toBe("showPhase")
         })
@@ -825,13 +826,13 @@ describe("processCommand", () => {
         })
 
         it("shows turn number and phase name at TURN_START", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("P", engine)
             expect(result.message).toBe("Turn 0 - Turn Start")
         })
 
         it("shows updated phase after advancing", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine } = createSimplePlayerVsEnemyMission()
             transitionToNextPhase(engine)
             transitionToNextPhase(engine)
             const result = processCommand("P", engine)
@@ -841,18 +842,18 @@ describe("processCommand", () => {
 
     describe("numbered combat actions (A1, A2, …)", () => {
         const setupPlayerTurnWithLini = () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine, playerSquaddieId } = createSimplePlayerVsEnemyMission()
             engine.transitionToNextPhase()
             engine.transitionToNextPhase()
             const context: CommandContext = {
-                selectedSquaddieId: engine.getLiniSquaddieId(),
+                selectedSquaddieId: playerSquaddieId,
                 interactionPhase: InteractionPhase.BROWSING,
                 actingSquaddieId: undefined,
             }
             return { engine, context }
         }
 
-        const drainNonPlayerTurns = (engine: MissionEngineTestHarness) => {
+        const drainNonPlayerTurns = (engine: MissionEngine) => {
             for (let i = 0; i < 20; i++) {
                 if (
                     engine.getCurrentAffiliationTurn() ===
@@ -869,8 +870,7 @@ describe("processCommand", () => {
 
         const setupPlayerTurnWithLiniAdjacentToEnemy = () => {
             const allFoursQueue = Array<number>(40).fill(4)
-            const engine = new MissionEngineTestHarness(new RollGenerator(allFoursQueue))
-            const liniId = engine.getLiniSquaddieId()
+            const { engine, playerSquaddieId: liniId } = createSimplePlayerVsEnemyMission(new RollGenerator(allFoursQueue))
 
             engine.transitionToNextPhase()
             engine.transitionToNextPhase()
@@ -933,9 +933,9 @@ describe("processCommand", () => {
             it("shows forecast for the auto-selected target (the Slither Demon)", () => {
                 const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
                 const result = processCommand("A3", engine, context)
-                const slitherDemonInfo = engine.getSquaddieInfo(
-                    engine.getSlitherDemonSquaddieId()
-                )
+                const allPositions = engine.getAllSquaddiePositions()
+                const slitherDemonPos = allPositions.find((p) => p.squaddieId.outOfBattleSquaddieId === "slither-demon")!
+                const slitherDemonInfo = engine.getSquaddieInfo(slitherDemonPos.squaddieId)
                 expect(result.message).toContain("Forecast for")
                 expect(result.message).toContain(slitherDemonInfo.name)
             })
@@ -950,7 +950,7 @@ describe("processCommand", () => {
                 const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
                 const result = processCommand("A3", engine, context)
                 expect(result.updatedContext?.actingSquaddieId).toEqual(
-                    engine.getLiniSquaddieId()
+                    context.selectedSquaddieId
                 )
             })
 
@@ -1059,16 +1059,15 @@ describe("processCommand", () => {
 
         describe("SELECTING_TARGET for combat action", () => {
             it("cancels when a non-coordinate input is entered during combat target selection", () => {
-                const engine = new MissionEngineTestHarness()
+                const { engine, playerSquaddieId: liniId } = createSimplePlayerVsEnemyMission()
                 engine.transitionToNextPhase()
                 engine.transitionToNextPhase()
-                const liniId = engine.getLiniSquaddieId()
 
                 const context: CommandContext = {
                     selectedSquaddieId: liniId,
                     interactionPhase: InteractionPhase.SELECTING_TARGET,
                     actingSquaddieId: liniId,
-                    pendingActionId: "lini-heal",
+                    pendingActionId: SimpleTestMissionIds.player.healActionId,
                     pendingTargetCount: 1,
                 }
 
@@ -1080,16 +1079,15 @@ describe("processCommand", () => {
             })
 
             it("cancels when an out-of-range coordinate is entered during combat target selection", () => {
-                const engine = new MissionEngineTestHarness()
+                const { engine, playerSquaddieId: liniId } = createSimplePlayerVsEnemyMission()
                 engine.transitionToNextPhase()
                 engine.transitionToNextPhase()
-                const liniId = engine.getLiniSquaddieId()
 
                 const context: CommandContext = {
                     selectedSquaddieId: liniId,
                     interactionPhase: InteractionPhase.SELECTING_TARGET,
                     actingSquaddieId: liniId,
-                    pendingActionId: "lini-heal",
+                    pendingActionId: SimpleTestMissionIds.player.healActionId,
                     pendingTargetCount: 2,
                 }
 
@@ -1105,11 +1103,11 @@ describe("processCommand", () => {
     describe("wrong-affiliation guard", () => {
         // Advance to PLAYER_TURN and set the Slither Demon as the selected squaddie.
         const setupEnemySelectedDuringPlayerTurn = () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine, enemySquaddieId } = createSimplePlayerVsEnemyMission()
             engine.transitionToNextPhase()
             engine.transitionToNextPhase()
             const context: CommandContext = {
-                selectedSquaddieId: engine.getSlitherDemonSquaddieId(),
+                selectedSquaddieId: enemySquaddieId,
                 interactionPhase: InteractionPhase.BROWSING,
                 actingSquaddieId: undefined,
             }
@@ -1143,11 +1141,11 @@ describe("processCommand", () => {
         })
 
         it("does not return the guard error when Lini is selected during PLAYER_TURN", () => {
-            const engine = new MissionEngineTestHarness()
+            const { engine, playerSquaddieId } = createSimplePlayerVsEnemyMission()
             engine.transitionToNextPhase()
             engine.transitionToNextPhase()
             const context: CommandContext = {
-                selectedSquaddieId: engine.getLiniSquaddieId(),
+                selectedSquaddieId: playerSquaddieId,
                 interactionPhase: InteractionPhase.BROWSING,
                 actingSquaddieId: undefined,
             }
@@ -1160,11 +1158,11 @@ describe("processCommand", () => {
         // Shared setup: advance to PLAYER_TURN so Lini can act.
         const setupPlayerTurnWithLini = () => {
             const allFoursQueue = Array<number>(40).fill(4)
-            const engine = new MissionEngineTestHarness(new RollGenerator(allFoursQueue))
+            const { engine, playerSquaddieId } = createSimplePlayerVsEnemyMission(new RollGenerator(allFoursQueue))
             engine.transitionToNextPhase()
             engine.transitionToNextPhase()
             const context: CommandContext = {
-                selectedSquaddieId: engine.getLiniSquaddieId(),
+                selectedSquaddieId: playerSquaddieId,
                 interactionPhase: InteractionPhase.BROWSING,
                 actingSquaddieId: undefined,
             }
@@ -1172,7 +1170,7 @@ describe("processCommand", () => {
         }
 
         // Drain non-player turns until PLAYER_TURN returns.
-        const drainNonPlayerTurns = (engine: MissionEngineTestHarness) => {
+        const drainNonPlayerTurns = (engine: MissionEngine) => {
             for (let i = 0; i < 20; i++) {
                 if (
                     engine.getCurrentAffiliationTurn() ===
@@ -1229,7 +1227,7 @@ describe("processCommand", () => {
 
         it("returns cannot-undo message after executing a combat action against an enemy", () => {
             const { engine, context } = setupPlayerTurnWithLini()
-            const liniId = engine.getLiniSquaddieId()
+            const liniId = context.selectedSquaddieId!
 
             // Move Lini adjacent to the Slither Demon and end her turn.
             engine.readyAction({
@@ -1264,19 +1262,10 @@ describe("processCommand", () => {
         // (distances 4, 5, 6). All three are returned as valid targets for the LINE action.
         const setupValeWithLightningBoltInRange = () => {
             const allFoursQueue = Array<number>(40).fill(4)
-            const engine = new MissionEngine(
-                createTargetPracticeMission(),
-                new RollGenerator(allFoursQueue)
-            )
+            const { engine, actorId: valeId } = createLineActionMission(new RollGenerator(allFoursQueue))
 
             engine.transitionToNextPhase()
             engine.transitionToNextPhase()
-
-            // Vale is the only squaddie with outOfBattleSquaddieId "vale".
-            const valeId = engine
-                .getAllSquaddiePositions()
-                .find((p) => p.squaddieId.outOfBattleSquaddieId === "vale")!
-                .squaddieId
 
             // Move Vale to (2,2) via (1,0)→(1,1)→(2,2): 2 tile moves, 1 AP cost.
             engine.readyAction({
