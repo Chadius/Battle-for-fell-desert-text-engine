@@ -8,6 +8,8 @@ import type { CommandContext } from "./commandProcessor.js"
 import { MissionEngineTestHarness } from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
 import { MissionAffiliationTurn } from "../logic/src/mission/missionTurn.js"
 import { RollGenerator } from "../logic/src/squaddieAction/calculate/roll/rollGenerator.js"
+import { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
+import { createTargetPracticeMission } from "../logic/src/testUtils/mission/targetPracticeMission.js"
 
 describe("processCommand", () => {
     describe("quit action", () => {
@@ -770,7 +772,7 @@ describe("processCommand", () => {
                 (a) => a.actionId === "default-move"
             )
 
-            const targetCoord = moveAction?.targetCoordinates[0]
+            const targetCoord = moveAction?.reachableCoordinates[0]
             expect(targetCoord).toBeDefined()
             if (!targetCoord) return
 
@@ -950,6 +952,20 @@ describe("processCommand", () => {
                 expect(result.updatedContext?.actingSquaddieId).toEqual(
                     engine.getLiniSquaddieId()
                 )
+            })
+
+            it("CONFIRMING_ACTION message includes the map with HT marker on the target", () => {
+                const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
+                const result = processCommand("A3", engine, context)
+                expect(result.message).toContain("HT")
+            })
+
+            // Scimitar targets an adjacent cell — no intermediate line cells exist,
+            // so "//" markers only appear for actions with multi-step range.
+            it("CONFIRMING_ACTION message does not include // for a 1-step melee action", () => {
+                const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
+                const result = processCommand("A3", engine, context)
+                expect(result.message).not.toContain("//")
             })
 
             // Forecast message should always include the confirmation prompt
@@ -1239,6 +1255,119 @@ describe("processCommand", () => {
             const result = processCommand("Z", engine)
             expect(result.action).toBe("undoAction")
             expect(result.message).toContain("action cannot be undone")
+        })
+    })
+
+    describe("multi-target LINE action — Lightning Bolt hits all demons in range", () => {
+        // Vale moves from (1,0) to (2,2): 2 tiles with HUSTLE costs 1 AP, leaving 2 AP for
+        // Lightning Bolt. From (2,2), demons at (2,6), (2,7), (2,8) are all within LONG range
+        // (distances 4, 5, 6). All three are returned as valid targets for the LINE action.
+        const setupValeWithLightningBoltInRange = () => {
+            const allFoursQueue = Array<number>(40).fill(4)
+            const engine = new MissionEngine(
+                createTargetPracticeMission(),
+                new RollGenerator(allFoursQueue)
+            )
+
+            engine.transitionToNextPhase()
+            engine.transitionToNextPhase()
+
+            // Vale is the only squaddie with outOfBattleSquaddieId "vale".
+            const valeId = engine
+                .getAllSquaddiePositions()
+                .find((p) => p.squaddieId.outOfBattleSquaddieId === "vale")!
+                .squaddieId
+
+            // Move Vale to (2,2) via (1,0)→(1,1)→(2,2): 2 tile moves, 1 AP cost.
+            engine.readyAction({
+                actor: valeId,
+                targets: [valeId],
+                action: {
+                    id: "default-move",
+                    decisions: { desiredMovementDestination: { row: 2, col: 2 } },
+                },
+            })
+            engine.useActionAndGetResults()
+
+            const context: CommandContext = {
+                selectedSquaddieId: valeId,
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+            }
+
+            return { engine, context, valeId }
+        }
+
+        it("selecting Lightning Bolt (A2) with multiple targets in range enters SELECTING_TARGET", () => {
+            const { engine, context } = setupValeWithLightningBoltInRange()
+            const result = processCommand("A2", engine, context)
+            expect(result.action).toBe("executeAction")
+            expect(result.updatedContext?.interactionPhase).toBe(
+                InteractionPhase.SELECTING_TARGET
+            )
+        })
+
+        it("aiming at a demon coordinate enters CONFIRMING_ACTION instead of cancelling", () => {
+            const { engine, context } = setupValeWithLightningBoltInRange()
+            const selectResult = processCommand("A2", engine, context)
+            // Aim toward the farthest in-range demon at (2,8).
+            const aimResult = processCommand("2, 8", engine, selectResult.updatedContext!)
+            expect(aimResult.action).toBe("executeAction")
+            expect(aimResult.updatedContext?.interactionPhase).toBe(
+                InteractionPhase.CONFIRMING_ACTION
+            )
+        })
+
+        it("CONFIRMING_ACTION message includes the map with HT markers on hit targets", () => {
+            const { engine, context } = setupValeWithLightningBoltInRange()
+            const selectResult = processCommand("A2", engine, context)
+            const aimResult = processCommand("2, 8", engine, selectResult.updatedContext!)
+            expect(aimResult.message).toContain("HT")
+        })
+
+        it("CONFIRMING_ACTION message includes // markers on line path cells", () => {
+            const { engine, context } = setupValeWithLightningBoltInRange()
+            const selectResult = processCommand("A2", engine, context)
+            const aimResult = processCommand("2, 8", engine, selectResult.updatedContext!)
+            expect(aimResult.message).toContain("//")
+        })
+
+        it("CONFIRMING_ACTION message does not mark friendly squaddies as HT", () => {
+            // Gloria is at (3,0), off the line of fire. She should never appear as HT.
+            // Previously a bug caused squaddies sharing inBattleSquaddieId=0 (Vale, Gloria,
+            // and Demon 0 all have index 0 within their outOfBattleSquaddieId bucket) to all
+            // be treated as hit targets when any one of them was targeted.
+            // The fix compares both inBattleSquaddieId AND outOfBattleSquaddieId.
+            const { engine, context } = setupValeWithLightningBoltInRange()
+            const selectResult = processCommand("A2", engine, context)
+            const aimResult = processCommand("2, 8", engine, selectResult.updatedContext!)
+
+            // The line from Vale at (2,2) to aim (2,8) hits exactly 3 demons at (2,6), (2,7), (2,8).
+            // Vale and Gloria must NOT be counted. Without the fix, 5 markers appeared (Vale + Gloria + 3 demons).
+            const htCount = (aimResult.message.match(/HT/g) ?? []).length
+            expect(htCount).toBe(3)
+        })
+
+        it("forecast contains a section for each demon in range along the line", () => {
+            const { engine, context } = setupValeWithLightningBoltInRange()
+            const selectResult = processCommand("A2", engine, context)
+            const aimResult = processCommand("2, 8", engine, selectResult.updatedContext!)
+
+            // Three demons at (2,6), (2,7), (2,8) are all named "Slither Demon".
+            const forecastSections = aimResult.message.match(/Forecast for Slither Demon/g)
+            expect(forecastSections).toBeDefined()
+            expect(forecastSections!.length).toBeGreaterThanOrEqual(2)
+        })
+
+        it("pressing Y executes the action and returns to BROWSING", () => {
+            const { engine, context } = setupValeWithLightningBoltInRange()
+            const selectResult = processCommand("A2", engine, context)
+            const aimResult = processCommand("2, 8", engine, selectResult.updatedContext!)
+            const confirmResult = processCommand("Y", engine, aimResult.updatedContext!)
+            expect(confirmResult.action).toBe("executeAction")
+            expect(confirmResult.updatedContext?.interactionPhase).toBe(
+                InteractionPhase.BROWSING
+            )
         })
     })
 })

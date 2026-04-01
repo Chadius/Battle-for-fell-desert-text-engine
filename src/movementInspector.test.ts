@@ -28,6 +28,75 @@ describe("movementInspector", () => {
         })
     })
 
+    describe("buildActionEffectOverlay", () => {
+        it("places HT at each target position", () => {
+            const overlay = MovementInspector.buildActionEffectOverlay(
+                { row: 0, col: 0 },
+                [{ row: 1, col: 2 }, { row: 3, col: 4 }]
+            )
+            expect(overlay.get("1,2")).toBe("HT")
+            expect(overlay.get("3,4")).toBe("HT")
+        })
+
+        it("places <> at aim coordinate when no target is there", () => {
+            const overlay = MovementInspector.buildActionEffectOverlay(
+                { row: 0, col: 0 },
+                [{ row: 1, col: 2 }]
+            )
+            expect(overlay.get("0,0")).toBe("<>")
+        })
+
+        it("leaves aim coordinate as HT when a target occupies the aim coordinate", () => {
+            const overlay = MovementInspector.buildActionEffectOverlay(
+                { row: 1, col: 2 },
+                [{ row: 1, col: 2 }]
+            )
+            expect(overlay.get("1,2")).toBe("HT")
+        })
+
+        it("skips target positions with undefined row or col", () => {
+            const overlay = MovementInspector.buildActionEffectOverlay(
+                { row: 0, col: 0 },
+                [
+                    { row: undefined, col: 1 },
+                    { row: 2, col: undefined },
+                    { row: 3, col: 4 },
+                ]
+            )
+            expect(overlay.get("3,4")).toBe("HT")
+            expect(overlay.size).toBe(2) // aim + one valid target
+        })
+
+        it("marks intermediate line cells with // when lineCoordinates provided", () => {
+            const overlay = MovementInspector.buildActionEffectOverlay(
+                { row: 0, col: 4 },
+                [],
+                [{ row: 0, col: 1 }, { row: 0, col: 2 }, { row: 0, col: 3 }, { row: 0, col: 4 }]
+            )
+            expect(overlay.get("0,1")).toBe("//")
+            expect(overlay.get("0,2")).toBe("//")
+            expect(overlay.get("0,3")).toBe("//")
+        })
+
+        it("aim coordinate overrides // on a line cell", () => {
+            const overlay = MovementInspector.buildActionEffectOverlay(
+                { row: 0, col: 3 },
+                [],
+                [{ row: 0, col: 1 }, { row: 0, col: 2 }, { row: 0, col: 3 }]
+            )
+            expect(overlay.get("0,3")).toBe("<>")
+        })
+
+        it("HT overrides // when a target is on the line", () => {
+            const overlay = MovementInspector.buildActionEffectOverlay(
+                { row: 0, col: 4 },
+                [{ row: 0, col: 2 }],
+                [{ row: 0, col: 1 }, { row: 0, col: 2 }, { row: 0, col: 3 }, { row: 0, col: 4 }]
+            )
+            expect(overlay.get("0,2")).toBe("HT")
+        })
+    })
+
     describe("buildRouteOverlay", () => {
         it("marks a non-final step with **", () => {
             const path = CoordinateMovePathService.new({

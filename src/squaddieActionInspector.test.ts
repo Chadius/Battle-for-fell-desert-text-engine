@@ -98,8 +98,8 @@ describe("squaddieActionInspector", () => {
                     {
                         actionId: "heal",
                         actionName: "Heal",
-                        targetCoordinates: [],
-                        targetBattleSquaddieIds: [],
+                        reachableCoordinates: [],
+                        aimCoordinateResults: [],
                     },
                 ],
             }
@@ -124,8 +124,8 @@ describe("squaddieActionInspector", () => {
                     {
                         actionId: "default-end-turn",
                         actionName: "End Turn",
-                        targetCoordinates: [],
-                        targetBattleSquaddieIds: [],
+                        reachableCoordinates: [],
+                        aimCoordinateResults: [],
                     },
                 ],
             }
@@ -147,8 +147,8 @@ describe("squaddieActionInspector", () => {
                     {
                         actionId: "default-move",
                         actionName: "Move",
-                        targetCoordinates: [],
-                        targetBattleSquaddieIds: [],
+                        reachableCoordinates: [],
+                        aimCoordinateResults: [],
                     },
                 ],
             }
@@ -177,8 +177,8 @@ describe("squaddieActionInspector", () => {
                     {
                         actionId: "default-end-turn",
                         actionName: "End Turn",
-                        targetCoordinates: [],
-                        targetBattleSquaddieIds: [],
+                        reachableCoordinates: [],
+                        aimCoordinateResults: [],
                     },
                 ],
             }
@@ -229,20 +229,20 @@ describe("squaddieActionInspector", () => {
                     {
                         actionId: "default-move",
                         actionName: "Move",
-                        targetCoordinates: [],
-                        targetBattleSquaddieIds: [],
+                        reachableCoordinates: [],
+                        aimCoordinateResults: [],
                     },
                     {
                         actionId: "default-end-turn",
                         actionName: "End Turn",
-                        targetCoordinates: [],
-                        targetBattleSquaddieIds: [],
+                        reachableCoordinates: [],
+                        aimCoordinateResults: [],
                     },
                     {
                         actionId: "attack",
                         actionName: "Attack",
-                        targetCoordinates: [],
-                        targetBattleSquaddieIds: [],
+                        reachableCoordinates: [],
+                        aimCoordinateResults: [],
                     },
                 ],
                 invalidActions: [],
@@ -261,8 +261,8 @@ describe("squaddieActionInspector", () => {
                     {
                         actionId: "attack",
                         actionName: "Attack",
-                        targetCoordinates: [],
-                        targetBattleSquaddieIds: [],
+                        reachableCoordinates: [],
+                        aimCoordinateResults: [],
                     },
                 ],
                 invalidActions: [
@@ -301,14 +301,14 @@ describe("squaddieActionInspector", () => {
                     {
                         actionId: "zebra-action",
                         actionName: "Zebra",
-                        targetCoordinates: [],
-                        targetBattleSquaddieIds: [],
+                        reachableCoordinates: [],
+                        aimCoordinateResults: [],
                     },
                     {
                         actionId: "apple-action",
                         actionName: "Apple",
-                        targetCoordinates: [],
-                        targetBattleSquaddieIds: [],
+                        reachableCoordinates: [],
+                        aimCoordinateResults: [],
                     },
                 ],
                 invalidActions: [],
@@ -348,14 +348,14 @@ describe("squaddieActionInspector", () => {
                     {
                         actionId: "heal",
                         actionName: "Heal",
-                        targetCoordinates: [],
-                        targetBattleSquaddieIds: [],
+                        reachableCoordinates: [],
+                        aimCoordinateResults: [],
                     },
                     {
                         actionId: "attack",
                         actionName: "Attack",
-                        targetCoordinates: [],
-                        targetBattleSquaddieIds: [],
+                        reachableCoordinates: [],
+                        aimCoordinateResults: [],
                     },
                 ],
                 invalidActions: [],
@@ -384,14 +384,14 @@ describe("squaddieActionInspector", () => {
                     {
                         actionId: "default-end-turn",
                         actionName: "End Turn",
-                        targetCoordinates: [],
-                        targetBattleSquaddieIds: [],
+                        reachableCoordinates: [],
+                        aimCoordinateResults: [],
                     },
                     {
                         actionId: "default-move",
                         actionName: "Move",
-                        targetCoordinates: [],
-                        targetBattleSquaddieIds: [],
+                        reachableCoordinates: [],
+                        aimCoordinateResults: [],
                     },
                 ],
                 invalidActions: [],

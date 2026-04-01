@@ -18,13 +18,41 @@ const buildMovementOverlay = (
 }
 
 const buildTargetOverlay = (
-    targetCoordinates: OffsetCoordinate[]
+    targetCoordinates: Array<{ aimCoordinate: OffsetCoordinate }>
 ): Map<string, string> => {
     const overlay = new Map<string, string>()
-    for (const targetCoordinate of targetCoordinates) {
-        const key = `${targetCoordinate.row},${targetCoordinate.col}`
+    for (const { aimCoordinate } of targetCoordinates) {
+        const key = `${aimCoordinate.row},${aimCoordinate.col}`
         overlay.set(key, "TG")
     }
+    return overlay
+}
+
+// Builds an overlay showing which tiles the action line passes through and which are hit.
+// Priority (highest wins): "HT" hit target > "<>" aim coordinate > "//" line path cell.
+const buildActionEffectOverlay = (
+    aimCoordinate: OffsetCoordinate,
+    targetPositions: Array<{ row: number | undefined; col: number | undefined }>,
+    lineCoordinates?: OffsetCoordinate[]
+): Map<string, string> => {
+    const overlay = new Map<string, string>()
+
+    // Lowest priority: mark intermediate line cells that the bolt passes through.
+    if (lineCoordinates != undefined) {
+        for (const cell of lineCoordinates) {
+            overlay.set(`${cell.row},${cell.col}`, "//")
+        }
+    }
+
+    // Medium priority: aim coordinate overrides a plain line cell.
+    overlay.set(`${aimCoordinate.row},${aimCoordinate.col}`, "<>")
+
+    // Highest priority: hit targets override everything.
+    for (const pos of targetPositions) {
+        if (pos.row == undefined || pos.col == undefined) continue
+        overlay.set(`${pos.row},${pos.col}`, "HT")
+    }
+
     return overlay
 }
 
@@ -45,5 +73,6 @@ const buildRouteOverlay = (
 export const MovementInspector = {
     buildMovementOverlay,
     buildTargetOverlay,
+    buildActionEffectOverlay,
     buildRouteOverlay,
 }

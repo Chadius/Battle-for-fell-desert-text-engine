@@ -8,6 +8,7 @@ import {
 } from "./mapRenderer.js"
 import type { MapOverview } from "../logic/src/mission/missionEngine/missionEngine.js"
 import { SquaddieAffiliation } from "../logic/src/affiliation/affiliation.js"
+import { SquaddieIdConverterService } from "../logic/src/squaddie/idConverterService.js"
 
 describe("mapRenderer", () => {
     describe("terrainToSymbol", () => {
@@ -83,7 +84,14 @@ describe("mapRenderer", () => {
             }
 
             const labels = buildSquaddieLabels(overview)
-            expect(labels.get("lini")).toBe("L")
+            expect(
+                labels.get(
+                    SquaddieIdConverterService.squaddieIdToKey({
+                        outOfBattleSquaddieId: "lini",
+                        inBattleSquaddieId: 0,
+                    })
+                )
+            ).toBe("L")
         })
 
         it("disambiguates squaddies that share a first letter", () => {
@@ -117,11 +125,83 @@ describe("mapRenderer", () => {
             }
 
             const labels = buildSquaddieLabels(overview)
-            const liniLabel = labels.get("lini")!
-            const largoLabel = labels.get("largo")!
+            const liniLabel = labels.get(
+                SquaddieIdConverterService.squaddieIdToKey({
+                    outOfBattleSquaddieId: "lini",
+                    inBattleSquaddieId: 0,
+                })
+            )!
+            const largoLabel = labels.get(
+                SquaddieIdConverterService.squaddieIdToKey({
+                    outOfBattleSquaddieId: "largo",
+                    inBattleSquaddieId: 1,
+                })
+            )!
             expect(liniLabel).not.toBe(largoLabel)
             expect(liniLabel.length).toBeGreaterThanOrEqual(1)
             expect(largoLabel.length).toBeGreaterThanOrEqual(1)
+        })
+
+        it("assigns distinct labels to multiple squaddies with the same outOfBattleSquaddieId", () => {
+            const overview: MapOverview = {
+                width: 4,
+                height: 1,
+                tiles: [
+                    [
+                        {
+                            row: 0,
+                            col: 0,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: {
+                                outOfBattleSquaddieId: "slither-demon",
+                                inBattleSquaddieId: 0,
+                            },
+                        },
+                        {
+                            row: 0,
+                            col: 1,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: {
+                                outOfBattleSquaddieId: "slither-demon",
+                                inBattleSquaddieId: 1,
+                            },
+                        },
+                        {
+                            row: 0,
+                            col: 2,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: {
+                                outOfBattleSquaddieId: "slither-demon",
+                                inBattleSquaddieId: 2,
+                            },
+                        },
+                        {
+                            row: 0,
+                            col: 3,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: {
+                                outOfBattleSquaddieId: "slither-demon",
+                                inBattleSquaddieId: 3,
+                            },
+                        },
+                    ],
+                ],
+            }
+
+            const labels = buildSquaddieLabels(overview)
+            const allLabels = [0, 1, 2, 3].map((id) =>
+                labels.get(
+                    SquaddieIdConverterService.squaddieIdToKey({
+                        outOfBattleSquaddieId: "slither-demon",
+                        inBattleSquaddieId: id,
+                    })
+                )
+            )
+            expect(allLabels).toEqual(["S0", "S1", "S2", "S3"])
         })
     })
 

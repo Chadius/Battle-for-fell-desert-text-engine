@@ -3,6 +3,7 @@ import {
     SquaddieAffiliation,
     type TSquaddieAffiliation,
 } from "../logic/src/affiliation/affiliation.js"
+import { SquaddieIdConverterService } from "../logic/src/squaddie/idConverterService.js"
 
 export interface MapRenderInfo {
     turnNumber: number
@@ -35,35 +36,47 @@ export const terrainToSymbol = (
     return "#"
 }
 
+// SquaddiePair associates a unique composite key with the archetype name used for label generation.
+interface SquaddiePair {
+    compositeKey: string
+    outOfBattleId: string
+}
+
 export const buildSquaddieLabels = (
     overview: MapOverview
 ): Map<string, string> => {
-    const squaddieIds: string[] = []
+    const squaddiePairs: SquaddiePair[] = []
 
     for (const row of overview.tiles) {
         for (const tile of row) {
             if (tile.squaddieId != undefined) {
-                squaddieIds.push(tile.squaddieId.outOfBattleSquaddieId)
+                squaddiePairs.push({
+                    compositeKey: SquaddieIdConverterService.squaddieIdToKey(
+                        tile.squaddieId
+                    ),
+                    outOfBattleId: tile.squaddieId.outOfBattleSquaddieId,
+                })
             }
         }
     }
 
     const labels = new Map<string, string>()
 
-    const firstCharGroups = new Map<string, string[]>()
-    for (const id of squaddieIds) {
-        const firstChar = id[0].toUpperCase()
+    // Group pairs by the first character of their outOfBattleId.
+    const firstCharGroups = new Map<string, SquaddiePair[]>()
+    for (const pair of squaddiePairs) {
+        const firstChar = pair.outOfBattleId[0].toUpperCase()
         if (!firstCharGroups.has(firstChar)) {
             firstCharGroups.set(firstChar, [])
         }
-        firstCharGroups.get(firstChar)!.push(id)
+        firstCharGroups.get(firstChar)!.push(pair)
     }
 
-    for (const [firstChar, ids] of firstCharGroups) {
-        if (ids.length === 1) {
-            labels.set(ids[0], firstChar)
+    for (const [firstChar, pairs] of firstCharGroups) {
+        if (pairs.length === 1) {
+            labels.set(pairs[0].compositeKey, firstChar)
         } else {
-            assignDisambiguatedLabels(ids, labels)
+            assignDisambiguatedLabels(pairs, labels)
         }
     }
 
@@ -71,27 +84,40 @@ export const buildSquaddieLabels = (
 }
 
 const assignDisambiguatedLabels = (
-    ids: string[],
+    pairs: SquaddiePair[],
     labels: Map<string, string>
 ): void => {
-    for (let charIndex = 1; charIndex < 20; charIndex++) {
-        const candidateLabels = ids.map((id) => {
-            const char = id[charIndex] ?? id[0]
-            return char.toUpperCase()
-        })
+    // When any two pairs share the same outOfBattleId, character-position
+    // disambiguation is impossible — go straight to indexed fallback.
+    const outOfBattleIds = pairs.map((p) => p.outOfBattleId)
+    const hasDuplicateArchetypes =
+        new Set(outOfBattleIds).size < outOfBattleIds.length
 
-        const allUnique =
-            new Set(candidateLabels).size === candidateLabels.length
-        if (allUnique) {
-            for (let i = 0; i < ids.length; i++) {
-                labels.set(ids[i], candidateLabels[i])
+    if (!hasDuplicateArchetypes) {
+        // Try to find a character position where all outOfBattleIds differ.
+        for (let charIndex = 1; charIndex < 20; charIndex++) {
+            const candidateLabels = pairs.map((pair) => {
+                const char = pair.outOfBattleId[charIndex] ?? pair.outOfBattleId[0]
+                return char.toUpperCase()
+            })
+
+            const allUnique =
+                new Set(candidateLabels).size === candidateLabels.length
+            if (allUnique) {
+                for (let i = 0; i < pairs.length; i++) {
+                    labels.set(pairs[i].compositeKey, candidateLabels[i])
+                }
+                return
             }
-            return
         }
     }
 
-    for (let i = 0; i < ids.length; i++) {
-        labels.set(ids[i], ids[i][0].toUpperCase() + i)
+    // Fallback: use first character of outOfBattleId plus a numeric index.
+    for (let i = 0; i < pairs.length; i++) {
+        labels.set(
+            pairs[i].compositeKey,
+            pairs[i].outOfBattleId[0].toUpperCase() + i
+        )
     }
 }
 
@@ -111,7 +137,9 @@ const renderGridLines = (
                 return overlayChar
             }
             if (tile.squaddieId != undefined) {
-                return squaddieLabels.get(tile.squaddieId.outOfBattleSquaddieId)!
+                return squaddieLabels.get(
+                    SquaddieIdConverterService.squaddieIdToKey(tile.squaddieId)
+                )!
             }
             return terrainToSymbol(tile.movementCost, tile.canStop)
         })
@@ -135,15 +163,26 @@ const renderLegend = (): string[] => {
 const collectSquaddieEntries = (
     overview: MapOverview,
     squaddieLabels: Map<string, string>
-): { id: string; label: string; row: number; col: number }[] => {
-    const entries: { id: string; label: string; row: number; col: number }[] =
-        []
+): { outOfBattleId: string; label: string; row: number; col: number }[] => {
+    const entries: {
+        outOfBattleId: string
+        label: string
+        row: number
+        col: number
+    }[] = []
     for (const row of overview.tiles) {
         for (const tile of row) {
             if (tile.squaddieId != undefined) {
-                const id = tile.squaddieId.outOfBattleSquaddieId
-                const label = squaddieLabels.get(id)!
-                entries.push({ id, label, row: tile.row, col: tile.col })
+                const compositeKey = SquaddieIdConverterService.squaddieIdToKey(
+                    tile.squaddieId
+                )
+                const label = squaddieLabels.get(compositeKey)!
+                entries.push({
+                    outOfBattleId: tile.squaddieId.outOfBattleSquaddieId,
+                    label,
+                    row: tile.row,
+                    col: tile.col,
+                })
             }
         }
     }
@@ -151,15 +190,21 @@ const collectSquaddieEntries = (
 }
 
 const renderFlatSquaddieList = (
-    entries: { id: string; label: string; row: number; col: number }[]
+    entries: { outOfBattleId: string; label: string; row: number; col: number }[]
 ): string[] => {
     return entries.map(
-        (entry) => `  ${entry.label} = ${entry.id} (${entry.row},${entry.col})`
+        (entry) =>
+            `  ${entry.label} = ${entry.outOfBattleId} (${entry.row},${entry.col})`
     )
 }
 
 const renderGroupedSquaddieList = (
-    entries: { id: string; label: string; row: number; col: number }[],
+    entries: {
+        outOfBattleId: string
+        label: string
+        row: number
+        col: number
+    }[],
     squaddieAffiliations: Map<string, TSquaddieAffiliation>
 ): string[] => {
     const affiliationOrder: TSquaddieAffiliation[] = [
@@ -172,14 +217,15 @@ const renderGroupedSquaddieList = (
     const lines: string[] = []
     for (const affiliation of affiliationOrder) {
         const groupEntries = entries.filter(
-            (entry) => squaddieAffiliations.get(entry.id) === affiliation
+            (entry) =>
+                squaddieAffiliations.get(entry.outOfBattleId) === affiliation
         )
         if (groupEntries.length === 0) continue
 
         lines.push(`  ${affiliationDisplayName(affiliation)}:`)
         for (const entry of groupEntries) {
             lines.push(
-                `    ${entry.label} = ${entry.id} (${entry.row},${entry.col})`
+                `    ${entry.label} = ${entry.outOfBattleId} (${entry.row},${entry.col})`
             )
         }
     }

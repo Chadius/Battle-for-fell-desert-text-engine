@@ -13,6 +13,7 @@ import {MovementInspector,} from "./movementInspector.js"
 import {ActionResultInspector} from "./actionResultInspector.js"
 import {OffsetCoordinate} from "../logic/src/coordinateMap/offsetCoordinate.js";
 import {ValidSquaddieAction} from "../logic/src/squaddieAction/calculate/validity/squaddieActionValidationService.js";
+import {CoordinateCalculator} from "../logic/src/coordinateMap/coordinateCalculator.js";
 
 export const InteractionPhase = {
     BROWSING: "BROWSING",
@@ -163,6 +164,59 @@ const buildSquaddieAffiliations = (
         }
     }
     return squaddieAffiliations
+}
+
+// Renders the map with the action line, aim coordinate, and hit targets highlighted.
+// "//" marks cells the bolt passes through; "<>" marks the aim coordinate; "HT" marks squaddies that will be hit.
+// Both inBattleSquaddieId and outOfBattleSquaddieId must match to correctly identify targets
+// (inBattleSquaddieId is an index per outOfBattleSquaddieId, not a global unique ID).
+const buildActionEffectMapText = (
+    aimCoordinate: OffsetCoordinate,
+    allTargetIds: BattleSquaddieId[],
+    actingSquaddieId: BattleSquaddieId,
+    engine: MissionEngine
+): string => {
+    const squaddiePositions = engine.getAllSquaddiePositions()
+
+    const hitPositions = squaddiePositions
+        .filter((p) =>
+            allTargetIds.some(
+                (t) =>
+                    t.inBattleSquaddieId === p.squaddieId.inBattleSquaddieId &&
+                    t.outOfBattleSquaddieId === p.squaddieId.outOfBattleSquaddieId
+            )
+        )
+        .map((p) => p.coordinate)
+
+    // Find actor's position to compute the line path. Exclude the actor's own cell (index 0)
+    // so the actor's symbol shows normally rather than being replaced by "//".
+    const actorEntry = squaddiePositions.find(
+        (p) =>
+            p.squaddieId.inBattleSquaddieId === actingSquaddieId.inBattleSquaddieId &&
+            p.squaddieId.outOfBattleSquaddieId === actingSquaddieId.outOfBattleSquaddieId
+    )
+    const lineCoordinates: OffsetCoordinate[] | undefined =
+        actorEntry?.coordinate.row != undefined &&
+        actorEntry?.coordinate.col != undefined
+            ? CoordinateCalculator.calculateEveryCoordinateInLine(
+                  { row: actorEntry.coordinate.row, col: actorEntry.coordinate.col },
+                  aimCoordinate
+              ).slice(1)
+            : undefined
+
+    const tileOverlays = MovementInspector.buildActionEffectOverlay(aimCoordinate, hitPositions, lineCoordinates)
+    const overview = engine.getMapOverview()
+    const turnNumber = engine.getCurrentTurnNumber()
+    const affiliationTurn = engine.getCurrentAffiliationTurn()
+    const currentAffiliation =
+        MissionTurnService.getSquaddieAffiliationForAffiliationTurn(affiliationTurn)
+    const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
+    return renderMap(overview, {
+        turnNumber,
+        currentAffiliation,
+        squaddieAffiliations,
+        tileOverlays,
+    })
 }
 
 const handleShowMap = (engine?: MissionEngine): CommandResult => {
@@ -398,7 +452,7 @@ const handleSelectNumberedAction = (
     return handleInitiateCombatAction(actionId, engine, context)
 }
 
-const handleInitiateCombatActionWith1Target = (targetIds: BattleSquaddieId[], engine: MissionEngine, actingSquaddieId: BattleSquaddieId, actionId: string): CommandResult => {
+const handleInitiateCombatActionWith1Target = (targetIds: BattleSquaddieId[], engine: MissionEngine, actingSquaddieId: BattleSquaddieId, actionId: string, aimCoordinate: OffsetCoordinate): CommandResult => {
     const targetId = targetIds[0]
 
     const readyResult = engine.readyAction({
@@ -421,9 +475,11 @@ const handleInitiateCombatActionWith1Target = (targetIds: BattleSquaddieId[], en
         targetName
     )
 
+    const mapText = buildActionEffectMapText(aimCoordinate, targetIds, actingSquaddieId, engine)
+
     return {
         action: "executeAction",
-        message: forecastText + "\nPress Y to confirm or N/C to cancel.",
+        message: mapText + "\n" + forecastText + "\nPress Y to confirm or N/C to cancel.",
         updatedContext: {
             selectedSquaddieId: actingSquaddieId,
             interactionPhase: InteractionPhase.CONFIRMING_ACTION,
@@ -450,13 +506,23 @@ const handleInitiateCombatAction = (
         }
     }
 
-    const targetIds = validAction.targetBattleSquaddieIds
+    // Use the aim coordinate results already computed by getSquaddieActionValidity.
+    // Filter to only tiles where the LINE/AOE would hit at least one target.
+    const validAimCoordinates = validAction.aimCoordinateResults.filter(
+        (c) => c.targetIds.length > 0
+    )
 
-    if (targetIds.length === 1) {
-        return handleInitiateCombatActionWith1Target(targetIds, engine, actingSquaddieId, actionId);
+    if (validAimCoordinates.length === 1) {
+        return handleInitiateCombatActionWith1Target(
+            validAimCoordinates[0].targetIds,
+            engine,
+            actingSquaddieId,
+            actionId,
+            validAimCoordinates[0].aimCoordinate
+        )
     }
 
-    const tileOverlays = MovementInspector.buildTargetOverlay(validAction.targetCoordinates)
+    const tileOverlays = MovementInspector.buildTargetOverlay(validAimCoordinates)
     const overview = engine.getMapOverview()
     const turnNumber = engine.getCurrentTurnNumber()
     const affiliationTurn = engine.getCurrentAffiliationTurn()
@@ -482,7 +548,7 @@ const handleInitiateCombatAction = (
             interactionPhase: InteractionPhase.SELECTING_TARGET,
             actingSquaddieId,
             pendingActionId: actionId,
-            pendingTargetCount: targetIds.length,
+            pendingTargetCount: validAimCoordinates.length,
         },
     }
 }
@@ -528,26 +594,32 @@ const handleCombatActionTargetSelection = (
     if (!validActionCheck.isValid) {
         return validActionCheck.commandResult!
     }
-    const validAction = validActionCheck.validAction!
 
-    const validTargetAtCoordinateCheck = handleCombatActionTargetSelectionIsValidTargetAtCoordinate({
-        validAction,
-        desiredCoordinate,
+    // Ask the engine which squaddies would be hit by aiming at the desired coordinate.
+    // Returns [] if the coordinate is out of range or no targets are in the action's area.
+    const allTargetIds = engine.getTargetsForAimCoordinate({
+        actor: actingSquaddieId,
+        actionId: context.pendingActionId!,
+        aimCoordinate: desiredCoordinate,
     })
-    if (!validTargetAtCoordinateCheck.isValid) {
-        return validTargetAtCoordinateCheck.commandResult!
-    }
 
-    const getTargetSquaddieIdCheck = handleCombatActionTargetSelectionGetTargetSquaddieId({engine, desiredCoordinate})
-    if (!getTargetSquaddieIdCheck.isValid) {
-        return getTargetSquaddieIdCheck.commandResult!
+    if (allTargetIds.length === 0) {
+        return {
+            action: "cancelAction",
+            message: `No targets in that direction. Action cancelled.`,
+            updatedContext: {
+                selectedSquaddieId: undefined,
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+                pendingActionId: undefined,
+            },
+        }
     }
-    const targetSquaddieId = getTargetSquaddieIdCheck.targetSquaddieId!
 
     const readyActionCheck = handleCombatActionTargetSelectionCheckForValidReadyAction({
         engine,
         actingSquaddieId,
-        targetSquaddieIds: [targetSquaddieId],
+        targetSquaddieIds: allTargetIds,
         context,
     })
     if (!readyActionCheck.isValid) {
@@ -555,21 +627,35 @@ const handleCombatActionTargetSelection = (
     }
 
     const forecasts = engine.previewReadiedActionAndForecastResults()
-    const targetName = engine.getSquaddieInfo(targetSquaddieId).name
-    const forecastText = SquaddieActionInspector.formatForecast(
-        forecasts,
-        targetName
-    )
+
+    // Single target: show one forecast block. Multiple targets: show one block per target.
+    let forecastText: string
+    if (allTargetIds.length === 1) {
+        const targetName = engine.getSquaddieInfo(allTargetIds[0]).name
+        forecastText = SquaddieActionInspector.formatForecast(forecasts, targetName)
+    } else {
+        forecastText = allTargetIds
+            .map((targetId) => {
+                const targetForecasts = forecasts.filter(
+                    (f) => f.battleSquaddieId.inBattleSquaddieId === targetId.inBattleSquaddieId
+                )
+                const name = engine.getSquaddieInfo(targetId).name
+                return SquaddieActionInspector.formatForecast(targetForecasts, name)
+            })
+            .join("\n")
+    }
+
+    const mapText = buildActionEffectMapText(desiredCoordinate, allTargetIds, actingSquaddieId, engine)
 
     return {
         action: "executeAction",
-        message: forecastText + "\nPress Y to confirm or N/C to cancel.",
+        message: mapText + "\n" + forecastText + "\nPress Y to confirm or N/C to cancel.",
         updatedContext: {
             selectedSquaddieId: actingSquaddieId,
             interactionPhase: InteractionPhase.CONFIRMING_ACTION,
             actingSquaddieId,
             pendingActionId: context.pendingActionId,
-            pendingTargetCount: context.pendingTargetCount,
+            pendingTargetCount: allTargetIds.length,
         },
     }
 }
@@ -580,7 +666,7 @@ const handleCombatActionTargetSelectionIsActionValid = (
         actingSquaddieId: BattleSquaddieId,
         context: CommandContext
     }
-): { isValid: boolean, commandResult?: CommandResult, validAction?: ValidSquaddieAction } => {
+): { isValid: boolean, commandResult?: CommandResult } => {
     const validity = engine.getSquaddieActionValidity(actingSquaddieId)
     const validAction = validity.validActions.find(
         (a) => a.actionId === context.pendingActionId
@@ -600,54 +686,9 @@ const handleCombatActionTargetSelectionIsActionValid = (
             }
         }
     }
-    return {isValid: true, validAction}
-}
-
-const handleCombatActionTargetSelectionIsValidTargetAtCoordinate = (
-    {validAction, desiredCoordinate}: { validAction: ValidSquaddieAction, desiredCoordinate: OffsetCoordinate }
-): { isValid: boolean, commandResult?: CommandResult } => {
-    const isValidTarget = validAction.targetCoordinates.some(
-        (c) =>
-            c.row === desiredCoordinate.row && c.col === desiredCoordinate.col
-    )
-
-    if (!isValidTarget) {
-        return {
-            isValid: false, commandResult: {
-                action: "cancelAction",
-                message: `(${desiredCoordinate.row},${desiredCoordinate.col}) is not a valid target. Action cancelled.`,
-                updatedContext: {
-                    selectedSquaddieId: undefined,
-                    interactionPhase: InteractionPhase.BROWSING,
-                    actingSquaddieId: undefined,
-                    pendingActionId: undefined,
-                },
-            }
-        }
-    }
     return {isValid: true}
 }
 
-const handleCombatActionTargetSelectionGetTargetSquaddieId = (
-    {engine, desiredCoordinate}: { engine: MissionEngine, desiredCoordinate: OffsetCoordinate }
-): { isValid: boolean, commandResult?: CommandResult, targetSquaddieId?: BattleSquaddieId } => {
-    const targetSquaddieId = engine.getSquaddieAtCoordinate(desiredCoordinate)
-    if (targetSquaddieId == undefined) {
-        return {
-            isValid: false, commandResult: {
-                action: "cancelAction",
-                message: "No target at that coordinate. Action cancelled.",
-                updatedContext: {
-                    selectedSquaddieId: undefined,
-                    interactionPhase: InteractionPhase.BROWSING,
-                    actingSquaddieId: undefined,
-                    pendingActionId: undefined,
-                },
-            }
-        }
-    }
-    return {isValid: true, targetSquaddieId}
-}
 
 const handleCombatActionTargetSelectionCheckForValidReadyAction = (
     {engine, actingSquaddieId, targetSquaddieIds, context}: {
@@ -849,7 +890,7 @@ const handleMovementTargetSelection = (
         (a) => a.actionId === "default-move"
     )
     const isReachable =
-        moveAction?.targetCoordinates.some(
+        moveAction?.reachableCoordinates.some(
             (coordinate) =>
                 coordinate.row === desiredTargetCoordinate.row &&
                 coordinate.col === desiredTargetCoordinate.col
