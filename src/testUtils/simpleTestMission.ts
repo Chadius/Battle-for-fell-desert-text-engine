@@ -14,7 +14,7 @@ import { OutOfBattleSquaddieAttributeSheetService } from "../../logic/src/squadd
 import { OutOfBattleSquaddieService } from "../../logic/src/squaddie/outOfBattle/outOfBattleSquaddie.js"
 import { SquaddieActionManager } from "../../logic/src/squaddieAction/squaddieActionManager.js"
 import { SquaddieActionCollectionService } from "../../logic/src/squaddieAction/squaddieActionCollection.js"
-import { SquaddieActionService } from "../../logic/src/squaddieAction/squaddieAction.js"
+import { HowToDetermineDegreeOfSuccess, SquaddieActionService } from "../../logic/src/squaddieAction/squaddieAction.js"
 import type { SquaddieAction } from "../../logic/src/squaddieAction/squaddieAction.js"
 import { SquaddieAffiliation } from "../../logic/src/affiliation/affiliation.js"
 import { AttributeScore } from "../../logic/src/proficiency/attributeScore.js"
@@ -405,7 +405,7 @@ function createHealAction(): SquaddieAction {
             foe: false,
             friend: true,
         },
-        actorRollsToHit: false,
+        howToDetermineDegreeOfSuccess: HowToDetermineDegreeOfSuccess.AUTOMATIC_SUCCESS,
         effectOnActor: {
             [DegreeOfSuccess.SUCCESS]: {
                 actionPoints: { spent: 1 },
@@ -425,30 +425,73 @@ function createSolarSphereAction(): SquaddieAction {
     return SquaddieActionService.new({
         id: SimpleTestMissionIds.player.solarSphereActionId,
         name: "Solar Sphere",
-        attribute: AttributeScore.MIND,
-        proficiency: ProficiencyType.SKILL_MIND,
+        attribute: AttributeScore.SOUL,
+        proficiency: ProficiencyType.SKILL_SOUL,
         range: ActionRange.MEDIUM,
         shape: CoordinateGeneratorShape.BLOOM,
-        areaOfEffectSize: 1,
-        aimCoordinateRequiresTarget: false,
+        areaOfEffectSize: 0,
+        aimCoordinateRequiresTarget: true,
         affiliationRelationship: {
             self: false,
             foe: true,
             friend: false,
         },
-        actorRollsToHit: true,
+        howToDetermineDegreeOfSuccess:
+            HowToDetermineDegreeOfSuccess.TARGETS_ROLL_TO_RESIST,
+        multipleAttackPenalty: { applies: false, contribution: 0 },
         effectOnActor: {
             [DegreeOfSuccess.SUCCESS]: {
                 actionPoints: { spent: 2 },
             },
         },
         effectOnTarget: {
+            [DegreeOfSuccess.CRITICAL]: {},
             [DegreeOfSuccess.SUCCESS]: {
                 damage: {
-                    raw: 2,
-                    targetProficiency: ProficiencyType.ARMOR,
+                    raw: 1,
+                    targetProficiency: ProficiencyType.SKILL_SOUL,
                 },
             },
+            [DegreeOfSuccess.FAILURE]: {
+                damage: {
+                    raw: 2,
+                    targetProficiency: ProficiencyType.SKILL_SOUL,
+                },
+                conditions: {
+                    add: [
+                        SquaddieConditionService.new({
+                            type: SquaddieConditionType.SLOWED,
+                            amount: 1,
+                            duration: {
+                                duration: 1,
+                                decaysAt:
+                                SquaddieConditionDecaysAt.TURN_END,
+                            },
+                            source: SquaddieConditionSource.SPIRITUAL,
+                        }),
+                    ],
+                },
+            },
+            [DegreeOfSuccess.BOTCH]: {
+                damage: {
+                    raw: 4,
+                    targetProficiency: ProficiencyType.SKILL_SOUL,
+                },
+                conditions: {
+                    add: [
+                        SquaddieConditionService.new({
+                            type: SquaddieConditionType.SLOWED,
+                            amount: 3,
+                            duration: {
+                                duration: 1,
+                                decaysAt:
+                                SquaddieConditionDecaysAt.TURN_END,
+                            },
+                            source: SquaddieConditionSource.SPIRITUAL,
+                        }),
+                    ],
+                },
+            }
         },
     })
 }
@@ -706,7 +749,7 @@ function createLightningBoltAction(): SquaddieAction {
             foe: true,
             friend: false,
         },
-        actorRollsToHit: true,
+        howToDetermineDegreeOfSuccess: HowToDetermineDegreeOfSuccess.ACTOR_ROLLS_TO_HIT,
         degreesOfSuccess: [DegreeOfSuccess.SUCCESS, DegreeOfSuccess.FAILURE],
         effectOnActor: {
             [DegreeOfSuccess.SUCCESS]: {
@@ -738,7 +781,7 @@ function createIntimidatingGlareAction(): SquaddieAction {
             foe: true,
             friend: false,
         },
-        actorRollsToHit: true,
+        howToDetermineDegreeOfSuccess: HowToDetermineDegreeOfSuccess.ACTOR_ROLLS_TO_HIT,
         effectOnActor: {
             [DegreeOfSuccess.SUCCESS]: {
                 actionPoints: { spent: 1 },
@@ -814,7 +857,7 @@ function createShieldAction(): SquaddieAction {
             foe: false,
             friend: false,
         },
-        actorRollsToHit: false,
+        howToDetermineDegreeOfSuccess: HowToDetermineDegreeOfSuccess.AUTOMATIC_SUCCESS,
         effectOnActor: {
             [DegreeOfSuccess.SUCCESS]: {
                 actionPoints: { spent: 1 },

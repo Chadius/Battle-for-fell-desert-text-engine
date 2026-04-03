@@ -86,6 +86,12 @@ const formatTargetResult = (
     engine: MissionEngine,
     degreesOfSuccess: TDegreeOfSuccess[] | undefined
 ): string[] => {
+    // For TARGETS_ROLL_TO_RESIST actions, each target carries its own resistance roll.
+    const lines: string[] = []
+    if (targetResult.targetRoll != undefined) {
+        lines.push(`Roll: [${targetResult.targetRoll[0]}, ${targetResult.targetRoll[1]}]`)
+    }
+
     // Collect effect lines first; only emit the "Result:" header if there are effects
     const effectLines: string[] = []
 
@@ -111,14 +117,20 @@ const formatTargetResult = (
             targetResult.degreeOfSuccess === "FAILURE" ||
             targetResult.degreeOfSuccess === "BOTCH"
         ) {
-            return [`Result: ${formatDegreeOfSuccess(targetResult.degreeOfSuccess)}`]
+            return [
+                ...lines,
+                `Result: ${formatDegreeOfSuccess(targetResult.degreeOfSuccess)}`,
+            ]
         }
-        return []
+        return lines.length > 0 ? lines : []
     }
     // Omit the "Result:" header when the action can only produce a single outcome —
     // announcing the outcome adds no information the player doesn't already expect.
-    if (degreesOfSuccess != undefined && degreesOfSuccess.length === 1) return effectLines
+    if (degreesOfSuccess != undefined && degreesOfSuccess.length === 1) {
+        return [...lines, ...effectLines]
+    }
     return [
+        ...lines,
         `Result: ${formatDegreeOfSuccess(targetResult.degreeOfSuccess)}`,
         ...effectLines,
     ]

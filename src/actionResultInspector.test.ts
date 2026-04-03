@@ -327,6 +327,84 @@ describe("ActionResultInspector", () => {
             expect(result).not.toContain("Lini heals")
         })
 
+        it("shows target roll when targetRoll is present", () => {
+            const engine = new MissionEngineTestHarness()
+            const slitherDemonId = engine.getSlitherDemonSquaddieId()
+
+            const actionResult: ActionResult = {
+                targetResults: {
+                    "slither-key": {
+                        degreeOfSuccess: DegreeOfSuccess.SUCCESS,
+                        targetRoll: [5, 4],
+                        squaddieActionResults: [
+                            {
+                                inBattleSquaddieId:
+                                    slitherDemonId.inBattleSquaddieId,
+                                outOfBattleSquaddieId:
+                                    slitherDemonId.outOfBattleSquaddieId,
+                                damage: {
+                                    net: 2,
+                                    raw: 2,
+                                    absorbed: 0,
+                                    willKo: false,
+                                    type: undefined,
+                                },
+                            },
+                        ],
+                    },
+                },
+            }
+
+            const result = ActionResultInspector.formatActionResults(
+                actionResult,
+                engine
+            )
+            expect(result).toContain("Roll: [5, 4]")
+        })
+
+        it("shows target roll for each target independently", () => {
+            const engine = new MissionEngineTestHarness()
+            const liniId = engine.getLiniSquaddieId()
+            const slitherDemonId = engine.getSlitherDemonSquaddieId()
+
+            // Two targets each with their own roll (as in a TARGETS_ROLL_TO_RESIST AoE action)
+            const actionResult: ActionResult = {
+                targetResults: {
+                    "slither-key": {
+                        degreeOfSuccess: DegreeOfSuccess.SUCCESS,
+                        targetRoll: [5, 4],
+                        squaddieActionResults: [
+                            {
+                                inBattleSquaddieId:
+                                    slitherDemonId.inBattleSquaddieId,
+                                outOfBattleSquaddieId:
+                                    slitherDemonId.outOfBattleSquaddieId,
+                                damage: {
+                                    net: 2,
+                                    raw: 2,
+                                    absorbed: 0,
+                                    willKo: false,
+                                    type: undefined,
+                                },
+                            },
+                        ],
+                    },
+                    "lini-key": {
+                        degreeOfSuccess: DegreeOfSuccess.FAILURE,
+                        targetRoll: [2, 1],
+                        squaddieActionResults: [],
+                    },
+                },
+            }
+
+            const result = ActionResultInspector.formatActionResults(
+                actionResult,
+                engine
+            )
+            expect(result).toContain("Roll: [5, 4]")
+            expect(result).toContain("Roll: [2, 1]")
+        })
+
         it("includes squaddie name in damage line", () => {
             const engine = new MissionEngineTestHarness()
             const slitherDemonId = engine.getSlitherDemonSquaddieId()
