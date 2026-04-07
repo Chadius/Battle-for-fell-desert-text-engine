@@ -5,6 +5,35 @@ import {
 } from "../logic/src/testUtils/mission/defaultCampaign.js"
 import { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
 import { TextMissionRunner } from "./textMissionRunner.js"
+import type { DebugFlags } from "../logic/src/mission/debugFlags.js"
+import { DEBUG_FLAG_NAMES } from "./commandProcessor.js"
+
+// Parses --debug=flagName,flagName2 arguments from argv and applies them to the engine.
+// Unknown flag names are warned about but do not abort. Returns the remaining positional args.
+const parseArgv = (
+    argv: string[]
+): { missionId: string | undefined; debugFlagNames: (keyof DebugFlags)[] } => {
+    const debugFlagNames: (keyof DebugFlags)[] = []
+    const positional: string[] = []
+
+    for (const arg of argv) {
+        if (arg.startsWith("--debug=")) {
+            const names = arg.slice("--debug=".length).split(",")
+            for (const name of names) {
+                const trimmed = name.trim() as keyof DebugFlags
+                if (DEBUG_FLAG_NAMES.includes(trimmed)) {
+                    debugFlagNames.push(trimmed)
+                } else {
+                    console.warn(`[index] Unknown debug flag: "${trimmed}". Known flags: ${DEBUG_FLAG_NAMES.join(", ")}`)
+                }
+            }
+        } else {
+            positional.push(arg)
+        }
+    }
+
+    return { missionId: positional[0], debugFlagNames }
+}
 
 // Loads a MissionEngine from the default campaign, prompting interactively if the requested ID is unknown.
 async function selectMissionEngine(
@@ -74,7 +103,16 @@ const rl = readline.createInterface({
 })
 
 ;(async () => {
-    const engine = await selectMissionEngine(rl, process.argv[2])
+    // Separate --debug= flags from the positional mission ID
+    const { missionId, debugFlagNames } = parseArgv(process.argv.slice(2))
+
+    const engine = await selectMissionEngine(rl, missionId)
+
+    // Apply any debug flags requested on the command line
+    for (const flag of debugFlagNames) {
+        engine.setDebugFlag(flag, true)
+    }
+
     const runner = new TextMissionRunner(engine)
     console.log(runner.getWelcomeText())
     prompt(rl, runner)

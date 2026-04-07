@@ -1,4 +1,5 @@
 import type {MissionEngine} from "../logic/src/mission/missionEngine/missionEngine.js"
+import type {DebugFlags} from "../logic/src/mission/debugFlags.js"
 import type {BattleSquaddieId} from "../logic/src/squaddie/inBattle/inBattleSquaddieManager.js"
 import {MissionTurnService, type TMissionAffiliationTurn,} from "../logic/src/mission/missionTurn.js"
 import type {TSquaddieAffiliation} from "../logic/src/affiliation/affiliation.js"
@@ -14,6 +15,10 @@ import {ActionResultInspector} from "./actionResultInspector.js"
 import {OffsetCoordinate} from "../logic/src/coordinateMap/offsetCoordinate.js";
 import {ValidSquaddieAction} from "../logic/src/squaddieAction/calculate/validity/squaddieActionValidationService.js";
 import {CoordinateCalculator} from "../logic/src/coordinateMap/coordinateCalculator.js";
+
+// Ordered list of all known debug flags. Index 1-based maps to DS <n> commands.
+// Append new flags here as they are added to DebugFlags.
+export const DEBUG_FLAG_NAMES: (keyof DebugFlags)[] = ["enemyAlwaysEndsTheirTurn"]
 
 export const InteractionPhase = {
     BROWSING: "BROWSING",
@@ -40,6 +45,8 @@ export type CommandAction =
     | "executeAction"
     | "cancelAction"
     | "undoAction"
+    | "showDebugFlags"
+    | "setDebugFlag"
 
 export interface CommandContext {
     selectedSquaddieId: BattleSquaddieId | undefined
@@ -109,6 +116,14 @@ export const processCommand = (
         return handleSelectAction(normalizedInput, engine, context)
     }
 
+    if (normalizedInput === "DF") {
+        return handleShowDebugFlags(engine)
+    }
+
+    if (normalizedInput.startsWith("DS")) {
+        return handleSetDebugFlag(normalizedInput, engine)
+    }
+
     const coordinate = parseCoordinate(rawInput)
     if (coordinate != undefined) {
         return handleInspectCoordinate(engine, coordinate)
@@ -131,6 +146,7 @@ const handleShowCommands = (context?: CommandContext, engine?: MissionEngine): C
     }
 
     commandList.push("Z - Undo last action", "Q - Quit the game", "? - Show all commands")
+    commandList.push("DF - Show debug flags", "DS <n> - Toggle debug flag by number")
 
     // Append turn flow explanation
     commandList.push("", "Turn Flow: Player Turn → Enemy Turn → Ally Turn → Other Turn → next round")
@@ -145,6 +161,57 @@ const handleShowCommands = (context?: CommandContext, engine?: MissionEngine): C
     }
 
     return { action: "showCommands", message: commandList.join("\n") }
+}
+
+// Returns all debug flags and their current ON/OFF values, numbered for use with DS.
+const handleShowDebugFlags = (engine?: MissionEngine): CommandResult => {
+    if (engine == undefined) {
+        return { action: "showDebugFlags", message: "No engine available." }
+    }
+
+    const flags = engine.getDebugFlags() ?? {}
+    const lines = DEBUG_FLAG_NAMES.map((name, index) => {
+        const value = flags[name] === true ? "ON" : "OFF"
+        return `${index + 1}. ${name}: ${value}`
+    })
+
+    return { action: "showDebugFlags", message: lines.join("\n") }
+}
+
+// Toggles a debug flag by 1-based number (matching the DF display).
+// Input format: "DS 1"
+const handleSetDebugFlag = (
+    normalizedInput: string,
+    engine?: MissionEngine
+): CommandResult => {
+    if (engine == undefined) {
+        return { action: "setDebugFlag", message: "No engine available." }
+    }
+
+    const numberStr = normalizedInput.slice(2).trim()
+    const flagIndex = parseInt(numberStr, 10) - 1
+
+    if (
+        numberStr === "" ||
+        isNaN(flagIndex) ||
+        flagIndex < 0 ||
+        flagIndex >= DEBUG_FLAG_NAMES.length
+    ) {
+        return {
+            action: "setDebugFlag",
+            message: `Invalid flag number. Use DF to list flags and DS <n> to toggle.`,
+        }
+    }
+
+    const flagName = DEBUG_FLAG_NAMES[flagIndex]
+    const currentFlags = engine.getDebugFlags() ?? {}
+    const newValue = !(currentFlags[flagName] === true)
+    engine.setDebugFlag(flagName, newValue)
+
+    return {
+        action: "setDebugFlag",
+        message: `${flagName}: ${newValue ? "ON" : "OFF"}`,
+    }
 }
 
 const buildSquaddieAffiliations = (
@@ -899,10 +966,12 @@ const handleMovementTargetSelection = (
     if (!isReachable) {
         return {
             action: "moveSquaddie",
-            message: `Coordinate (${desiredTargetCoordinate.row},${desiredTargetCoordinate.col}) is out of reach.`,
+            message: `Coordinate (${desiredTargetCoordinate.row},${desiredTargetCoordinate.col}) is out of reach. Movement cancelled.`,
             updatedContext: {
-                ...context,
-                interactionPhase: InteractionPhase.SELECTING_TARGET,
+                selectedSquaddieId: undefined,
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+                pendingActionId: undefined,
             },
         }
     }

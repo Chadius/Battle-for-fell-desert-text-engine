@@ -3,6 +3,7 @@ import {
     processCommand,
     InteractionPhase,
     transitionToNextPhase,
+    DEBUG_FLAG_NAMES,
 } from "./commandProcessor.js"
 import type { CommandContext } from "./commandProcessor.js"
 import { MissionAffiliationTurn } from "../logic/src/mission/missionTurn.js"
@@ -691,7 +692,7 @@ describe("processCommand", () => {
             expect(moveResult.updatedContext?.pendingActionId).toBeUndefined()
         })
 
-        it("returns out of reach message for unreachable coordinate, keeping SELECTING_TARGET", () => {
+        it("cancels movement when an unreachable coordinate is entered during SELECTING_TARGET", () => {
             const { engine, context } = setupPlayerTurnWithLini()
             const selectResult = processCommand("AM", engine, context)
             const targetContext = selectResult.updatedContext!
@@ -700,7 +701,7 @@ describe("processCommand", () => {
             expect(moveResult.action).toBe("moveSquaddie")
             expect(moveResult.message).toContain("out of reach")
             expect(moveResult.updatedContext?.interactionPhase).toBe(
-                InteractionPhase.SELECTING_TARGET
+                InteractionPhase.BROWSING
             )
         })
 
@@ -1357,6 +1358,78 @@ describe("processCommand", () => {
             expect(confirmResult.updatedContext?.interactionPhase).toBe(
                 InteractionPhase.BROWSING
             )
+        })
+    })
+
+    describe("debug flag commands", () => {
+        const createEngine = () => {
+            const { engine } = createSimplePlayerVsEnemyMission({
+                rolls: new RollGenerator([4, 4]),
+            })
+            return engine
+        }
+
+        describe("DF - show debug flags", () => {
+            it("lists all known flags with their OFF state by default", () => {
+                const engine = createEngine()
+                const result = processCommand("DF", engine)
+                expect(result.action).toBe("showDebugFlags")
+                // Each known flag appears, numbered from 1
+                DEBUG_FLAG_NAMES.forEach((name, index) => {
+                    expect(result.message).toContain(`${index + 1}. ${name}: OFF`)
+                })
+            })
+
+            it("shows ON after a flag has been enabled", () => {
+                const engine = createEngine()
+                engine.setDebugFlag("enemyAlwaysEndsTheirTurn", true)
+                const result = processCommand("DF", engine)
+                expect(result.action).toBe("showDebugFlags")
+                expect(result.message).toContain("enemyAlwaysEndsTheirTurn: ON")
+            })
+
+            it("returns an error message when no engine is provided", () => {
+                const result = processCommand("DF")
+                expect(result.action).toBe("showDebugFlags")
+                expect(result.message).toContain("No engine available")
+            })
+        })
+
+        describe("DS <n> - toggle debug flag", () => {
+            it("toggles enemyAlwaysEndsTheirTurn from OFF to ON", () => {
+                const engine = createEngine()
+                const result = processCommand("DS 1", engine)
+                expect(result.action).toBe("setDebugFlag")
+                expect(result.message).toContain("enemyAlwaysEndsTheirTurn: ON")
+            })
+
+            it("toggles enemyAlwaysEndsTheirTurn from ON back to OFF", () => {
+                const engine = createEngine()
+                engine.setDebugFlag("enemyAlwaysEndsTheirTurn", true)
+                const result = processCommand("DS 1", engine)
+                expect(result.action).toBe("setDebugFlag")
+                expect(result.message).toContain("enemyAlwaysEndsTheirTurn: OFF")
+            })
+
+            it("returns an error for an out-of-range flag number", () => {
+                const engine = createEngine()
+                const result = processCommand("DS 99", engine)
+                expect(result.action).toBe("setDebugFlag")
+                expect(result.message).toContain("Invalid flag number")
+            })
+
+            it("returns an error when no number is provided", () => {
+                const engine = createEngine()
+                const result = processCommand("DS", engine)
+                expect(result.action).toBe("setDebugFlag")
+                expect(result.message).toContain("Invalid flag number")
+            })
+
+            it("returns an error message when no engine is provided", () => {
+                const result = processCommand("DS 1")
+                expect(result.action).toBe("setDebugFlag")
+                expect(result.message).toContain("No engine available")
+            })
         })
     })
 })
