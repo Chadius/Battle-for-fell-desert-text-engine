@@ -4,7 +4,7 @@ import { MissionStateService } from "../../logic/src/mission/missionState.js"
 import { CoordinateMapCollectionManager } from "../../logic/src/coordinateMap/coordinateMapManager.js"
 import { CoordinateMapCollectionService } from "../../logic/src/coordinateMap/coordinateMapCollection.js"
 import { CoordinateMapService } from "../../logic/src/coordinateMap/coordinateMap.js"
-import type { BattleSquaddieId } from "../../logic/src/squaddie/inBattle/inBattleSquaddieManager.js"
+import type { BattleSquaddieId } from "../../logic/src/squaddie/inBattle/battleSquaddieId.js"
 import { InBattleSquaddieManager } from "../../logic/src/squaddie/inBattle/inBattleSquaddieManager.js"
 import { InBattleSquaddieCollectionService } from "../../logic/src/squaddie/inBattle/inBattleSquaddieCollection.js"
 import { OutOfBattleSquaddieManager } from "../../logic/src/squaddie/outOfBattle/outOfBattleSquaddieManager.js"
@@ -220,7 +220,7 @@ function createSimpleOutOfBattleSquaddieManager(): OutOfBattleSquaddieManager {
     const liniAttributeSheet = OutOfBattleSquaddieAttributeSheetService.new({
         id: SimpleTestMissionIds.player.attributeSheetId,
         maxHitPoints: 5,
-        movement: { distancePerAction: 2 },
+        movement: { movementPointsPerAction: 2 },
         attributeScores: {
             [AttributeScore.BODY]: 1,
             [AttributeScore.MIND]: 0,
@@ -247,7 +247,7 @@ function createSimpleOutOfBattleSquaddieManager(): OutOfBattleSquaddieManager {
     const slitherDemonAttributeSheet = OutOfBattleSquaddieAttributeSheetService.new({
         id: SimpleTestMissionIds.enemy.attributeSheetId,
         maxHitPoints: 3,
-        movement: { distancePerAction: 2 },
+        movement: { movementPointsPerAction: 2 },
         attributeScores: {
             [AttributeScore.BODY]: 0,
             [AttributeScore.MIND]: -1,
@@ -583,7 +583,7 @@ function createLineOutOfBattleSquaddieManager(): OutOfBattleSquaddieManager {
     const valeAttributeSheet = OutOfBattleSquaddieAttributeSheetService.new({
         id: SimpleTestMissionIds.lineActor.attributeSheetId,
         maxHitPoints: 4,
-        movement: { distancePerAction: 2, skipOverPits: true },
+        movement: { movementPointsPerAction: 2, skipOverPits: true },
         attributeScores: {
             [AttributeScore.BODY]: -1,
             [AttributeScore.MIND]: 2,
@@ -611,7 +611,7 @@ function createLineOutOfBattleSquaddieManager(): OutOfBattleSquaddieManager {
     const gloriaAttributeSheet = OutOfBattleSquaddieAttributeSheetService.new({
         id: SimpleTestMissionIds.lineFriendly.attributeSheetId,
         maxHitPoints: 6,
-        movement: { distancePerAction: 2 },
+        movement: { movementPointsPerAction: 2 },
         attributeScores: {
             [AttributeScore.BODY]: 2,
             [AttributeScore.MIND]: -1,
@@ -641,7 +641,7 @@ function createLineOutOfBattleSquaddieManager(): OutOfBattleSquaddieManager {
     const demonAttributeSheet = OutOfBattleSquaddieAttributeSheetService.new({
         id: SimpleTestMissionIds.lineEnemy.attributeSheetId,
         maxHitPoints: 3,
-        movement: { distancePerAction: 2 },
+        movement: { movementPointsPerAction: 2 },
         attributeScores: {
             [AttributeScore.BODY]: 0,
             [AttributeScore.MIND]: -1,

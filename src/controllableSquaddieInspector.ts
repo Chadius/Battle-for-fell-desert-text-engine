@@ -1,5 +1,5 @@
 import type { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
-import type { BattleSquaddieId } from "../logic/src/squaddie/inBattle/inBattleSquaddieManager.js"
+import type { BattleSquaddieId } from "../logic/src/squaddie/inBattle/battleSquaddieId.js"
 import type { OffsetMaybeOffmapCoordinate } from "../logic/src/coordinateMap/coordinateMap.js"
 
 export interface ControllableSquaddieEntry {

@@ -1,6 +1,6 @@
 import type {MissionEngine} from "../logic/src/mission/missionEngine/missionEngine.js"
 import type {DebugFlags} from "../logic/src/mission/debugFlags.js"
-import type {BattleSquaddieId} from "../logic/src/squaddie/inBattle/inBattleSquaddieManager.js"
+import type {BattleSquaddieId} from "../logic/src/squaddie/inBattle/battleSquaddieId.js"
 import {MissionTurnService, type TMissionAffiliationTurn,} from "../logic/src/mission/missionTurn.js"
 import type {TSquaddieAffiliation} from "../logic/src/affiliation/affiliation.js"
 import {type MapRenderInfo, renderMap} from "./mapRenderer.js"

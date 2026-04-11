@@ -1363,9 +1363,9 @@ describe("processCommand", () => {
 
     describe("debug flag commands", () => {
         const createEngine = () => {
-            const { engine } = createSimplePlayerVsEnemyMission({
-                rolls: new RollGenerator([4, 4]),
-            })
+            const { engine } = createSimplePlayerVsEnemyMission(
+                new RollGenerator([4, 4]),
+            )
             return engine
         }
 
