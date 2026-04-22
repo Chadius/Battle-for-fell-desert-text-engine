@@ -14,6 +14,10 @@ import {
     createLineActionMission,
     SimpleTestMissionIds,
 } from "./testUtils/simpleTestMission.js"
+import {
+    createMovementMissionEngine,
+    MovementTestMissionIds,
+} from "./testUtils/movementTestMission.js"
 
 describe("processCommand", () => {
     describe("quit action", () => {
@@ -881,7 +885,7 @@ describe("processCommand", () => {
                 targets: [liniId],
                 action: {
                     id: "default-move",
-                    decisions: { desiredMovementDestination: { row: 2, col: 2 } },
+                    decisions: { targetDestination: { row: 2, col: 2 } },
                 },
             })
             engine.useActionAndGetResults()
@@ -1236,7 +1240,7 @@ describe("processCommand", () => {
                 targets: [liniId],
                 action: {
                     id: "default-move",
-                    decisions: { desiredMovementDestination: { row: 2, col: 2 } },
+                    decisions: { targetDestination: { row: 2, col: 2 } },
                 },
             })
             engine.useActionAndGetResults()
@@ -1274,7 +1278,7 @@ describe("processCommand", () => {
                 targets: [valeId],
                 action: {
                     id: "default-move",
-                    decisions: { desiredMovementDestination: { row: 2, col: 2 } },
+                    decisions: { targetDestination: { row: 2, col: 2 } },
                 },
             })
             engine.useActionAndGetResults()
@@ -1357,6 +1361,114 @@ describe("processCommand", () => {
             expect(confirmResult.action).toBe("executeAction")
             expect(confirmResult.updatedContext?.interactionPhase).toBe(
                 InteractionPhase.BROWSING
+            )
+        })
+    })
+
+    describe("Teleport action — Rescue (Vale rescues Fracta)", () => {
+        // Map layout: Fracta at (2,2), Vale at (5,1), Demons at (1,5) and (2,5).
+        // Vale's Rescue action: targets a friend within MEDIUM range, places them within
+        // MELEE range of Vale. Sorted alphabetically, Rescue is A2 (Gravity Pull is A1).
+        //
+        // Because Fracta is the only friend within MEDIUM range, she is auto-selected
+        // when A2 is initiated, and we jump directly to destination selection.
+
+        // Selects Vale, initiates Rescue (A2), returns the destination-selection result.
+        // Since Fracta is the only valid friend, she is auto-selected.
+        const setupValeSelectsRescue = () => {
+            const { engine, valeId } = createMovementMissionEngine()
+            const context: CommandContext = {
+                selectedSquaddieId: valeId,
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+            }
+            // A2 = Rescue (vale-mt-rescue, sorted after vale-mt-gravity-pull)
+            const result = processCommand("A2", engine, context)
+            return { engine, valeId, result }
+        }
+
+        // Gets a valid teleport destination from the engine (tiles within MELEE of Vale).
+        const getValidDestination = (
+            engine: ReturnType<typeof createMovementMissionEngine>["engine"],
+            valeId: ReturnType<typeof createMovementMissionEngine>["valeId"]
+        ) => {
+            const destinations = engine.getTargetDestinationsForAction(
+                valeId,
+                MovementTestMissionIds.vale.rescueActionId
+            )
+            expect(destinations.length).toBeGreaterThan(0)
+            return destinations[0].destination
+        }
+
+        it("A2 (Rescue) auto-selects the only valid friend and enters destination selection", () => {
+            const { result } = setupValeSelectsRescue()
+            expect(result.action).toBe("executeAction")
+            expect(result.updatedContext?.interactionPhase).toBe(
+                InteractionPhase.SELECTING_TARGET
+            )
+            expect(result.updatedContext?.pendingActionIsSelectingTeleportDestination).toBe(true)
+            expect(result.updatedContext?.pendingTeleportTargetId).toBeDefined()
+            expect(result.message).toContain("Select destination")
+        })
+
+        it("selecting a valid destination near Vale enters CONFIRMING_ACTION with a forecast", () => {
+            const { engine, valeId, result: rescueResult } = setupValeSelectsRescue()
+            const destination = getValidDestination(engine, valeId)
+
+            const destinationContext = rescueResult.updatedContext!
+            const result = processCommand(
+                `${destination.row},${destination.col}`, engine, destinationContext
+            )
+
+            expect(result.action).toBe("executeAction")
+            expect(result.updatedContext?.interactionPhase).toBe(
+                InteractionPhase.CONFIRMING_ACTION
+            )
+            // Message shows the destination coordinates the target will land on
+            expect(result.message).toContain(
+                `(${destination.row}, ${destination.col})`
+            )
+            expect(result.message).toContain("Press Y to confirm or N/C to cancel.")
+        })
+
+        it("an out-of-range destination keeps the player in destination selection with an error", () => {
+            const { engine, result: rescueResult } = setupValeSelectsRescue()
+            const destinationContext = rescueResult.updatedContext!
+            // Fracta's tile (2,2) is far from Vale — not within MELEE range
+            const result = processCommand("2,2", engine, destinationContext)
+            expect(result.updatedContext?.pendingActionIsSelectingTeleportDestination).toBe(true)
+        })
+
+        it("canceling from destination selection (non-coordinate input) returns to BROWSING", () => {
+            const { engine, result: rescueResult } = setupValeSelectsRescue()
+            const destinationContext = rescueResult.updatedContext!
+            const result = processCommand("cancel", engine, destinationContext)
+            expect(result.action).toBe("cancelAction")
+            expect(result.updatedContext?.interactionPhase).toBe(
+                InteractionPhase.BROWSING
+            )
+        })
+
+        it("Y in CONFIRMING_ACTION teleports Fracta and shows her new position", () => {
+            const { engine, valeId, result: rescueResult } = setupValeSelectsRescue()
+            const destination = getValidDestination(engine, valeId)
+
+            const destinationContext = rescueResult.updatedContext!
+            const confirmResult = processCommand(
+                `${destination.row},${destination.col}`, engine, destinationContext
+            )
+
+            const confirmContext = confirmResult.updatedContext!
+            const result = processCommand("Y", engine, confirmContext)
+
+            expect(result.action).toBe("executeAction")
+            expect(result.updatedContext?.interactionPhase).toBe(
+                InteractionPhase.BROWSING
+            )
+            // Result message reports where Fracta was moved
+            expect(result.message).toContain("is moved to")
+            expect(result.message).toContain(
+                `(${destination.row}, ${destination.col})`
             )
         })
     })

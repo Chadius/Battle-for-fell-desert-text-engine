@@ -26,7 +26,7 @@ describe("EnemyAI", () => {
             targets: [liniId],
             action: {
                 id: "default-move",
-                decisions: { desiredMovementDestination: { row: 2, col: 2 } },
+                decisions: { targetDestination: { row: 2, col: 2 } },
             },
         })
         engine.useActionAndGetResults()
@@ -101,7 +101,7 @@ describe("EnemyAI", () => {
                 targets: [liniId],
                 action: {
                     id: "default-move",
-                    decisions: { desiredMovementDestination: { row: 3, col: 3 } },
+                    decisions: { targetDestination: { row: 3, col: 3 } },
                 },
             })
             engine.useActionAndGetResults()

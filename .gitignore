@@ -8,3 +8,9 @@ dist/
 /build/
 /public/
 *.js.map
+*.ts.map
+*.d.ts
+*.d.ts.map
+/logic/tsconfig.tsbuildinfo
+/logic/**.ts.map
+/logic/**.d.ts.map

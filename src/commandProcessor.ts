@@ -13,7 +13,6 @@ import {MissionObjectiveInspector} from "./missionObjectiveInspector.js"
 import {MovementInspector,} from "./movementInspector.js"
 import {ActionResultInspector} from "./actionResultInspector.js"
 import {OffsetCoordinate} from "../logic/src/coordinateMap/offsetCoordinate.js";
-import {ValidSquaddieAction} from "../logic/src/squaddieAction/calculate/validity/squaddieActionValidationService.js";
 import {CoordinateCalculator} from "../logic/src/coordinateMap/coordinateCalculator.js";
 
 // Ordered list of all known debug flags. Index 1-based maps to DS <n> commands.
@@ -54,6 +53,16 @@ export interface CommandContext {
     actingSquaddieId: BattleSquaddieId | undefined
     pendingActionId?: string
     pendingTargetCount?: number
+    // True when the pending action moves the actor to a player-chosen destination
+    // (ACTOR_CHOSEN or ACTOR_CHOSEN_SPECIAL_TRAVERSAL). Routes SELECTING_TARGET
+    // input to the actor-chosen movement handler instead of the combat handler.
+    pendingActionIsActorChosenMovement?: boolean
+    // Stores the primary target chosen in phase 1 of a teleport action (e.g. Rescue).
+    // Used in phase 2 (destination selection) to call readyAction with both target and destination.
+    pendingTeleportTargetId?: BattleSquaddieId
+    // True when in the destination-selection phase of a teleport action.
+    // Routes SELECTING_TARGET input to handleTeleportDestinationSelection instead of the combat handler.
+    pendingActionIsSelectingTeleportDestination?: boolean
 }
 
 export interface CommandResult {
@@ -108,6 +117,13 @@ export const processCommand = (
     if (context?.interactionPhase === InteractionPhase.SELECTING_TARGET) {
         if (context.pendingActionId === "default-move") {
             return handleMovementTargetSelection(rawInput, engine, context)
+        }
+        if (context.pendingActionIsActorChosenMovement) {
+            return handleActorChosenMovementTargetSelection(rawInput, engine, context)
+        }
+        // Phase 2 of teleport: player is choosing where to place the rescued target.
+        if (context.pendingActionIsSelectingTeleportDestination) {
+            return handleTeleportDestinationSelection(rawInput, engine, context)
         }
         return handleCombatActionTargetSelection(rawInput, engine, context)
     }
@@ -510,9 +526,15 @@ const handleSelectNumberedAction = (
         (a) => a.actionId === actionId
     )
     if (invalidAction != undefined) {
-        return {
-            action: "selectAction",
-            message: `Cannot use ${invalidAction.actionName}: ${invalidAction.reason}`,
+        // Actions that require a destination decision (e.g. Rescue) are always categorized as
+        // invalid because the destination isn't chosen yet. Allow them to proceed through the
+        // two-step target → destination flow.
+        const decisions = engine.getRequiredDecisionsForAction(actionId)
+        if (!decisions.requiresTargetDestination) {
+            return {
+                action: "selectAction",
+                message: `Cannot use ${invalidAction.actionName}: ${invalidAction.reason}`,
+            }
         }
     }
 
@@ -521,6 +543,14 @@ const handleSelectNumberedAction = (
 
 const handleInitiateCombatActionWith1Target = (targetIds: BattleSquaddieId[], engine: MissionEngine, actingSquaddieId: BattleSquaddieId, actionId: string, aimCoordinate: OffsetCoordinate): CommandResult => {
     const targetId = targetIds[0]
+
+    // If the action requires a destination for the target (e.g. Rescue), skip readyAction here
+    // and start destination selection instead. readyAction will be called in phase 2 with both
+    // the target and the destination decision.
+    const decisions = engine.getRequiredDecisionsForAction(actionId)
+    if (decisions.requiresTargetDestination) {
+        return handleAfterTeleportPrimaryTargetSelected(targetId, actingSquaddieId, actionId, engine)
+    }
 
     const readyResult = engine.readyAction({
         actor: actingSquaddieId,
@@ -563,19 +593,60 @@ const handleInitiateCombatAction = (
 ): CommandResult => {
     const actingSquaddieId = context.selectedSquaddieId!
     const actorInfo = engine.getSquaddieInfo(actingSquaddieId)
-    const validity = engine.getSquaddieActionValidity(actingSquaddieId)
 
+    // Ask the engine what decisions the player needs to make for this action.
+    const decisions = engine.getRequiredDecisionsForAction(actionId)
+
+    // Actor needs to choose a destination (e.g. Leap): show destination overlay and enter SELECTING_TARGET.
+    if (decisions.requiresTargetDestination && !decisions.requiresSpecificTarget) {
+        return handleInitiateActorChosenMovementAction(actionId, engine, context)
+    }
+
+    // Aim-coordinate actions (e.g. future LINE/CONE): show aim area, player picks a coordinate.
+    if (decisions.requiresAimCoordinate) {
+        const aimCoordinates = engine.getAimCoordinatesForAction({ actor: actingSquaddieId, actionId })
+        if (aimCoordinates.length === 0) {
+            return { action: "selectAction", message: `No valid aim coordinates for this action.` }
+        }
+        const tileOverlays = MovementInspector.buildTargetOverlay(aimCoordinates)
+        const overview = engine.getMapOverview()
+        const turnNumber = engine.getCurrentTurnNumber()
+        const affiliationTurn = engine.getCurrentAffiliationTurn()
+        const currentAffiliation = MissionTurnService.getSquaddieAffiliationForAffiliationTurn(affiliationTurn)
+        const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
+        const mapText = renderMap(overview, { turnNumber, currentAffiliation, squaddieAffiliations, tileOverlays })
+        return {
+            action: "executeAction",
+            message: `${mapText}\n${actorInfo.name}: Select aim coordinate (or enter invalid coordinate to cancel):`,
+            updatedContext: {
+                selectedSquaddieId: actingSquaddieId,
+                interactionPhase: InteractionPhase.SELECTING_TARGET,
+                actingSquaddieId,
+                pendingActionId: actionId,
+                pendingTargetCount: aimCoordinates.length,
+            },
+        }
+    }
+
+    const validity = engine.getSquaddieActionValidity(actingSquaddieId)
     const validAction = validity.validActions.find((a) => a.actionId === actionId)
-    if (validAction == undefined) {
+
+    // Specific-target actions with a destination step (e.g. Rescue) are always in invalidActions
+    // because the destination isn't chosen yet. Compute their aim coordinates directly.
+    const teleportAimCoordinates = (decisions.requiresSpecificTarget && decisions.requiresTargetDestination)
+        ? engine.getAimCoordinatesForAction({ actor: actingSquaddieId, actionId })
+        : undefined
+
+    if (validAction == undefined && teleportAimCoordinates == undefined) {
         return {
             action: "selectAction",
             message: `Action ${actionId} is not valid.`,
         }
     }
 
-    // Use the aim coordinate results already computed by getSquaddieActionValidity.
-    // Filter to only tiles where the LINE/AOE would hit at least one target.
-    const validAimCoordinates = validAction.aimCoordinateResults.filter(
+    // Use pre-computed aim coordinates from validity when available; fall back to the directly-
+    // computed ones for actions that also require a destination (e.g. Rescue).
+    const validAimCoordinates = (teleportAimCoordinates ?? validAction!.aimCoordinateResults).filter(
         (c) => c.targetIds.length > 0
     )
 
@@ -653,10 +724,14 @@ const handleCombatActionTargetSelection = (
     }
 
     const actingSquaddieId = context.actingSquaddieId!
+    const pendingActionId = context.pendingActionId!
+    const decisions = engine.getRequiredDecisionsForAction(pendingActionId)
+
     const validActionCheck = handleCombatActionTargetSelectionIsActionValid({
         engine,
         actingSquaddieId,
         context,
+        decisions,
     })
     if (!validActionCheck.isValid) {
         return validActionCheck.commandResult!
@@ -666,7 +741,7 @@ const handleCombatActionTargetSelection = (
     // Returns [] if the coordinate is out of range or no targets are in the action's area.
     const allTargetIds = engine.getTargetsForAimCoordinate({
         actor: actingSquaddieId,
-        actionId: context.pendingActionId!,
+        actionId: pendingActionId,
         aimCoordinate: desiredCoordinate,
     })
 
@@ -681,6 +756,14 @@ const handleCombatActionTargetSelection = (
                 pendingActionId: undefined,
             },
         }
+    }
+
+    // If the action requires a destination for the target (e.g. Rescue), enter phase 2
+    // (destination selection) instead of readying the action now.
+    if (decisions.requiresTargetDestination) {
+        return handleAfterTeleportPrimaryTargetSelected(
+            allTargetIds[0], actingSquaddieId, pendingActionId, engine
+        )
     }
 
     const readyActionCheck = handleCombatActionTargetSelectionCheckForValidReadyAction({
@@ -728,10 +811,11 @@ const handleCombatActionTargetSelection = (
 }
 
 const handleCombatActionTargetSelectionIsActionValid = (
-    {engine, actingSquaddieId, context}: {
+    {engine, actingSquaddieId, context, decisions}: {
         engine: MissionEngine,
         actingSquaddieId: BattleSquaddieId,
         context: CommandContext
+        decisions: { requiresTargetDestination: boolean }
     }
 ): { isValid: boolean, commandResult?: CommandResult } => {
     const validity = engine.getSquaddieActionValidity(actingSquaddieId)
@@ -739,7 +823,13 @@ const handleCombatActionTargetSelectionIsActionValid = (
         (a) => a.actionId === context.pendingActionId
     )
 
-    if (validAction == undefined) {
+    // Actions that also require a destination (e.g. Rescue) are always in invalidActions at this
+    // stage because the destination hasn't been chosen yet. Allow them to proceed.
+    const isKnownTwoPhaseAction =
+        decisions.requiresTargetDestination &&
+        validity.invalidActions.some((a) => a.actionId === context.pendingActionId)
+
+    if (validAction == undefined && !isKnownTwoPhaseAction) {
         return {
             isValid: false, commandResult: {
                 action: "cancelAction",
@@ -878,6 +968,314 @@ const handleEndTurn = (
     }
 }
 
+// Starts an actor-chosen movement action (e.g. Leap). Shows the movement
+// overlay as a destination hint and prompts the player to pick a tile.
+const handleInitiateActorChosenMovementAction = (
+    actionId: string,
+    engine: MissionEngine,
+    context: CommandContext
+): CommandResult => {
+    const actingSquaddieId = context.selectedSquaddieId!
+    const info = engine.getSquaddieInfo(actingSquaddieId)
+
+    // Use the target destinations overlay as a hint. Special traversal rules (e.g.
+    // skipping pits for Leap) may allow additional tiles; readyAction is the
+    // authoritative validator.
+    const movementOptions = engine.getTargetDestinationsForAction(actingSquaddieId, actionId)
+    const tileOverlays = MovementInspector.buildMovementOverlay(movementOptions)
+
+    const overview = engine.getMapOverview()
+    const turnNumber = engine.getCurrentTurnNumber()
+    const affiliationTurn = engine.getCurrentAffiliationTurn()
+    const currentAffiliation =
+        MissionTurnService.getSquaddieAffiliationForAffiliationTurn(affiliationTurn)
+    const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
+
+    const renderInfo: MapRenderInfo = {
+        turnNumber,
+        currentAffiliation,
+        squaddieAffiliations,
+        tileOverlays,
+    }
+
+    const mapText = renderMap(overview, renderInfo)
+    const actionDef = engine.getActionById(actionId)
+    const message = `${mapText}\n${info.name}: Select destination for ${actionDef.name} (or enter invalid coordinate to cancel):`
+
+    return {
+        action: "executeAction",
+        message,
+        updatedContext: {
+            selectedSquaddieId: actingSquaddieId,
+            interactionPhase: InteractionPhase.SELECTING_TARGET,
+            actingSquaddieId,
+            pendingActionId: actionId,
+            pendingActionIsActorChosenMovement: true,
+        },
+    }
+}
+
+// Handles destination input for an actor-chosen movement action (e.g. Leap).
+// Calls readyAction with the chosen destination; readyAction validates range.
+const handleActorChosenMovementTargetSelection = (
+    rawInput: string,
+    engine: MissionEngine | undefined,
+    context: CommandContext
+): CommandResult => {
+    if (engine == undefined) {
+        return {
+            action: "moveSquaddie",
+            message: "No engine available to execute movement.",
+            updatedContext: {
+                selectedSquaddieId: undefined,
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+                pendingActionId: undefined,
+            },
+        }
+    }
+
+    const desiredTargetCoordinate = parseCoordinate(rawInput)
+    if (desiredTargetCoordinate == undefined) {
+        return {
+            action: "moveSquaddie",
+            message: "Movement cancelled.",
+            updatedContext: {
+                selectedSquaddieId: undefined,
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+                pendingActionId: undefined,
+            },
+        }
+    }
+
+    const actingSquaddieId = context.actingSquaddieId!
+    const info = engine.getSquaddieInfo(actingSquaddieId)
+
+    const readyResult = engine.readyAction({
+        actor: actingSquaddieId,
+        targets: [actingSquaddieId],
+        action: {
+            id: context.pendingActionId!,
+            decisions: { targetDestination: desiredTargetCoordinate },
+        },
+    })
+
+    if (!readyResult.isValid) {
+        return {
+            action: "moveSquaddie",
+            message: readyResult.message ?? "Cannot perform this action.",
+            updatedContext: {
+                selectedSquaddieId: undefined,
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+                pendingActionId: undefined,
+            },
+        }
+    }
+
+    const actionResult = engine.useActionAndGetResults()
+
+    const movementResult = Object.values(actionResult.targetResults)
+        .flatMap((target) => target.squaddieActionResults)
+        .find((result) => result.movement != undefined)
+
+    const tileOverlays =
+        movementResult?.movement == undefined
+            ? new Map<string, string>()
+            : MovementInspector.buildRouteOverlay(movementResult.movement.expectedPath)
+
+    const overview = engine.getMapOverview()
+    const turnNumber = engine.getCurrentTurnNumber()
+    const affiliationTurn = engine.getCurrentAffiliationTurn()
+    const currentAffiliation =
+        MissionTurnService.getSquaddieAffiliationForAffiliationTurn(affiliationTurn)
+    const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
+
+    const renderInfo: MapRenderInfo = {
+        turnNumber,
+        currentAffiliation,
+        squaddieAffiliations,
+        tileOverlays,
+    }
+
+    const routeMap = renderMap(overview, renderInfo)
+
+    const apSpent = movementResult?.actionPoints?.spent ?? 0
+    const infoAfter = engine.getSquaddieInfo(actingSquaddieId)
+    const apRemaining = infoAfter.currentActionPoints
+
+    const actionDef = engine.getActionById(context.pendingActionId!)
+    const message = `${info.name} uses ${actionDef.name} to move to (${desiredTargetCoordinate.row}, ${desiredTargetCoordinate.col}), spending ${apSpent} AP (${apRemaining} remaining).\n${routeMap}`
+
+    return {
+        action: "moveSquaddie",
+        message,
+        updatedContext: {
+            selectedSquaddieId: undefined,
+            interactionPhase: InteractionPhase.BROWSING,
+            actingSquaddieId: undefined,
+            pendingActionId: undefined,
+        },
+    }
+}
+
+// Phase 1 complete: a teleport primary target has been identified (either auto-selected or
+// chosen by the player from a multi-target overlay). Shows valid destination tiles so the
+// player can choose where to place the rescued target. Enters SELECTING_TARGET phase 2.
+const handleAfterTeleportPrimaryTargetSelected = (
+    targetId: BattleSquaddieId,
+    actorId: BattleSquaddieId,
+    actionId: string,
+    engine: MissionEngine
+): CommandResult => {
+    const validDestinations = engine.getTargetDestinationsForAction(actorId, actionId)
+    if (validDestinations.length === 0) {
+        return {
+            action: "cancelAction",
+            message: "No valid destinations for this action.",
+            updatedContext: {
+                selectedSquaddieId: undefined,
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+                pendingActionId: undefined,
+            },
+        }
+    }
+
+    const tileOverlays = MovementInspector.buildMovementOverlay(validDestinations)
+
+    const overview = engine.getMapOverview()
+    const turnNumber = engine.getCurrentTurnNumber()
+    const affiliationTurn = engine.getCurrentAffiliationTurn()
+    const currentAffiliation =
+        MissionTurnService.getSquaddieAffiliationForAffiliationTurn(affiliationTurn)
+    const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
+
+    const renderInfo: MapRenderInfo = {
+        turnNumber,
+        currentAffiliation,
+        squaddieAffiliations,
+        tileOverlays,
+    }
+
+    const mapText = renderMap(overview, renderInfo)
+    const targetName = engine.getSquaddieInfo(targetId).name
+    const actorName = engine.getSquaddieInfo(actorId).name
+    const actionDef = engine.getActionById(actionId)
+
+    return {
+        action: "executeAction",
+        message: `${mapText}\n${actorName} will use ${actionDef.name} on ${targetName}.\nSelect destination (or enter invalid coordinate to cancel):`,
+        updatedContext: {
+            selectedSquaddieId: actorId,
+            interactionPhase: InteractionPhase.SELECTING_TARGET,
+            actingSquaddieId: actorId,
+            pendingActionId: actionId,
+            pendingTeleportTargetId: targetId,
+            pendingActionIsSelectingTeleportDestination: true,
+        },
+    }
+}
+
+// Phase 2 of a teleport action: the player has chosen a destination for the rescued target.
+// Calls readyAction with both the target and the destination decision, shows a forecast,
+// and enters CONFIRMING_ACTION.
+const handleTeleportDestinationSelection = (
+    rawInput: string,
+    engine: MissionEngine | undefined,
+    context: CommandContext
+): CommandResult => {
+    if (engine == undefined) {
+        return {
+            action: "cancelAction",
+            message: "No engine available to execute action.",
+            updatedContext: {
+                selectedSquaddieId: undefined,
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+                pendingActionId: undefined,
+            },
+        }
+    }
+
+    const desiredDestination = parseCoordinate(rawInput)
+    if (desiredDestination == undefined) {
+        return {
+            action: "cancelAction",
+            message: "Action cancelled.",
+            updatedContext: {
+                selectedSquaddieId: undefined,
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+                pendingActionId: undefined,
+            },
+        }
+    }
+
+    const actorId = context.actingSquaddieId!
+    const targetId = context.pendingTeleportTargetId!
+    const actionId = context.pendingActionId!
+
+    const readyResult = engine.readyAction({
+        actor: actorId,
+        targets: [targetId],
+        action: {
+            id: actionId,
+            decisions: { targetDestination: desiredDestination },
+        },
+    })
+
+    if (!readyResult.isValid) {
+        // Keep the player in destination selection so they can try a different tile.
+        return {
+            action: "executeAction",
+            message: readyResult.message ?? "Invalid destination. Try another tile:",
+            updatedContext: context,
+        }
+    }
+
+    const forecasts = engine.previewReadiedActionAndForecastResults()
+    const targetName = engine.getSquaddieInfo(targetId).name
+    const actorName = engine.getSquaddieInfo(actorId).name
+    const actionDef = engine.getActionById(actionId)
+    const forecastText = SquaddieActionInspector.formatForecast(forecasts, targetName)
+
+    const overview = engine.getMapOverview()
+    const turnNumber = engine.getCurrentTurnNumber()
+    const affiliationTurn = engine.getCurrentAffiliationTurn()
+    const currentAffiliation =
+        MissionTurnService.getSquaddieAffiliationForAffiliationTurn(affiliationTurn)
+    const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
+
+    // Mark the destination tile to show the player where the target will land.
+    const tileOverlays = new Map<string, string>([
+        [`${desiredDestination.row},${desiredDestination.col}`, "TG"],
+    ])
+
+    const renderInfo: MapRenderInfo = {
+        turnNumber,
+        currentAffiliation,
+        squaddieAffiliations,
+        tileOverlays,
+    }
+
+    const mapText = renderMap(overview, renderInfo)
+
+    return {
+        action: "executeAction",
+        message: `${mapText}\n${actorName} will use ${actionDef.name} on ${targetName} → (${desiredDestination.row}, ${desiredDestination.col}).\n${forecastText}\nPress Y to confirm or N/C to cancel.`,
+        updatedContext: {
+            selectedSquaddieId: actorId,
+            interactionPhase: InteractionPhase.CONFIRMING_ACTION,
+            actingSquaddieId: actorId,
+            pendingActionId: actionId,
+            // pendingTargetCount: 1 so that N/C cancels to BROWSING rather than re-entering target selection.
+            pendingTargetCount: 1,
+        },
+    }
+}
+
 const handleInitiateMovement = (
     engine: MissionEngine,
     context: CommandContext
@@ -983,7 +1381,7 @@ const handleMovementTargetSelection = (
         targets: [actingSquaddieId],
         action: {
             id: "default-move",
-            decisions: { desiredMovementDestination: desiredTargetCoordinate },
+            decisions: { targetDestination: desiredTargetCoordinate },
         },
     })
 

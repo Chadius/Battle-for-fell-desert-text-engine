@@ -81,6 +81,18 @@ const formatConditionsAddedLines = (
     })
 }
 
+// Returns a line describing where a squaddie was moved to (e.g. teleport or forced move).
+const formatMovementLines = (
+    squaddieResult: SquaddieActionResult,
+    name: string
+): string[] => {
+    if (squaddieResult.movement == undefined) return []
+    const steps = squaddieResult.movement.expectedPath.steps
+    if (steps.length === 0) return []
+    const last = steps[steps.length - 1]
+    return [`  ${name} is moved to (${last.row}, ${last.col}).`]
+}
+
 const formatTargetResult = (
     targetResult: TargetResult,
     engine: MissionEngine,
@@ -100,7 +112,8 @@ const formatTargetResult = (
             squaddieResult.damage != undefined ||
             squaddieResult.healing != undefined ||
             (squaddieResult.conditionsAdded != undefined &&
-                squaddieResult.conditionsAdded.length > 0)
+                squaddieResult.conditionsAdded.length > 0) ||
+            squaddieResult.movement != undefined
         if (!hasEffects) continue
 
         const name = getSquaddieName(squaddieResult, engine)
@@ -108,6 +121,7 @@ const formatTargetResult = (
             ...formatDamageLines(squaddieResult, name),
             ...formatHealingLines(squaddieResult, name),
             ...formatConditionsAddedLines(squaddieResult, name),
+            ...formatMovementLines(squaddieResult, name),
         )
     }
 
