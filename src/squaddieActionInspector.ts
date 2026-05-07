@@ -207,6 +207,10 @@ const formatForecast = (
         const conditionResult = forecast.squaddieActionResults.find(
             (r) => r.conditionsAdded != undefined && r.conditionsAdded.length > 0
         )
+        // Check for forced movement (e.g., Gravity Pull)
+        const movementResult = forecast.squaddieActionResults.find(
+            (r) => r.movement != undefined
+        )
 
         let effectDesc = "no effect"
         if (damageResult?.damage != undefined) {
@@ -227,6 +231,17 @@ const formatForecast = (
                     return desc
                 })
                 .join(", ")
+        } else if (movementResult?.movement != undefined) {
+            const steps = movementResult.movement.expectedPath.steps
+            if (steps.length === 1) {
+                // Teleport path has exactly 1 step (the destination); forced movement always has 2+
+                // (START at origin + WALK steps). A 0-tile forced move returns no result at all.
+                const { row, col } = steps[0]
+                effectDesc = `teleported to (${row}, ${col})`
+            } else {
+                const tilesPulled = steps.length - 1
+                effectDesc = `pulled ${tilesPulled} ${tilesPulled === 1 ? "tile" : "tiles"} toward actor`
+            }
         }
 
         lines.push(`  ${chance} ${degree} → ${effectDesc}`)

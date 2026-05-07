@@ -586,6 +586,67 @@ const handleInitiateCombatActionWith1Target = (targetIds: BattleSquaddieId[], en
         },
     }
 }
+// When actorIsAimCoordinate is true, the actor's own position is the aim coordinate.
+// Skip target selection and go directly to the forecast + CONFIRMING_ACTION step.
+const handleInitiateCombatActionWithActorAsAimCoordinate = (
+    actionId: string,
+    engine: MissionEngine,
+    actingSquaddieId: BattleSquaddieId
+): CommandResult => {
+    const actorPosition = engine.getAllSquaddiePositions().find(
+        (p) =>
+            p.squaddieId.inBattleSquaddieId === actingSquaddieId.inBattleSquaddieId &&
+            p.squaddieId.outOfBattleSquaddieId === actingSquaddieId.outOfBattleSquaddieId
+    )
+    if (actorPosition == undefined) {
+        return { action: "selectAction", message: "Cannot find actor position." }
+    }
+
+    const aimCoordinate = actorPosition.coordinate
+    const allTargetIds = engine.getTargetsForAimCoordinate({
+        actor: actingSquaddieId,
+        actionId,
+        aimCoordinate,
+    })
+
+    if (allTargetIds.length === 0) {
+        return { action: "selectAction", message: "No targets in range for this action." }
+    }
+
+    const readyResult = engine.readyAction({
+        actor: actingSquaddieId,
+        targets: allTargetIds,
+        action: { id: actionId },
+    })
+    if (!readyResult.isValid) {
+        return { action: "selectAction", message: readyResult.message ?? "Cannot perform this action." }
+    }
+
+    const forecasts = engine.previewReadiedActionAndForecastResults()
+    const forecastText = allTargetIds
+        .map((targetId) => {
+            const targetForecasts = forecasts.filter(
+                (f) => f.battleSquaddieId.inBattleSquaddieId === targetId.inBattleSquaddieId
+            )
+            return SquaddieActionInspector.formatForecast(targetForecasts, engine.getSquaddieInfo(targetId).name)
+        })
+        .join("\n")
+
+    const mapText = buildActionEffectMapText(aimCoordinate, allTargetIds, actingSquaddieId, engine)
+
+    return {
+        action: "executeAction",
+        message: mapText + "\n" + forecastText + "\nPress Y to confirm or N/C to cancel.",
+        updatedContext: {
+            selectedSquaddieId: actingSquaddieId,
+            interactionPhase: InteractionPhase.CONFIRMING_ACTION,
+            actingSquaddieId,
+            pendingActionId: actionId,
+            pendingTargetCount: allTargetIds.length,
+        },
+    }
+}
+
 const handleInitiateCombatAction = (
     actionId: string,
     engine: MissionEngine,
@@ -600,6 +661,12 @@ const handleInitiateCombatAction = (
     // Actor needs to choose a destination (e.g. Leap): show destination overlay and enter SELECTING_TARGET.
     if (decisions.requiresTargetDestination && !decisions.requiresSpecificTarget) {
         return handleInitiateActorChosenMovementAction(actionId, engine, context)
+    }
+
+    // Aim-coordinate actions: if the actor IS the aim coordinate (e.g. Gravity Pull), skip
+    // target selection and use the actor's position directly.
+    if (decisions.requiresAimCoordinate && decisions.actorIsAimCoordinate) {
+        return handleInitiateCombatActionWithActorAsAimCoordinate(actionId, engine, actingSquaddieId)
     }
 
     // Aim-coordinate actions (e.g. future LINE/CONE): show aim area, player picks a coordinate.

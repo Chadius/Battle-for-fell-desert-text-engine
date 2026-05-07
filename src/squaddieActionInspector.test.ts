@@ -16,6 +16,10 @@ import {
     SquaddieConditionSource,
     SquaddieConditionType,
 } from "../logic/src/proficiency/squaddieCondition.js"
+import {
+    CoordinateMovePathMoveType,
+    CoordinateMovePathService,
+} from "../logic/src/coordinateMap/path/path.js"
 
 describe("squaddieActionInspector", () => {
     describe("formatActionPointCost", () => {
@@ -605,6 +609,68 @@ describe("squaddieActionInspector", () => {
             const result = SquaddieActionInspector.formatForecast(forecasts, "Slither Demon")
             expect(result).toContain("MAP -6")
             expect(result).toContain("Attack modifier:")
+        })
+
+        it("shows tiles pulled toward actor for forced movement outcomes", () => {
+            const { playerSquaddieId: liniId } = createSimplePlayerVsEnemyMission()
+
+            // 2 steps walked after the start = pulled 2 tiles
+            const forecasts: SerializedForecastedActionResult[] = [
+                {
+                    battleSquaddieId: liniId,
+                    degreeOfSuccess: DegreeOfSuccess.FAILURE,
+                    chanceOutOf36: 15,
+                    squaddieActionResults: [
+                        {
+                            inBattleSquaddieId: liniId.inBattleSquaddieId,
+                            outOfBattleSquaddieId: liniId.outOfBattleSquaddieId,
+                            movement: {
+                                expectedPath: CoordinateMovePathService.new({
+                                    steps: [
+                                        { row: 4, col: 4, moveType: CoordinateMovePathMoveType.START, moveCost: 0 },
+                                        { row: 4, col: 3, moveType: CoordinateMovePathMoveType.WALK, moveCost: 1 },
+                                        { row: 4, col: 2, moveType: CoordinateMovePathMoveType.WALK, moveCost: 1 },
+                                    ],
+                                }),
+                            },
+                        },
+                    ],
+                },
+            ]
+
+            const result = SquaddieActionInspector.formatForecast(forecasts, "Slither Demon")
+            expect(result).toContain("pulled 2 tiles toward actor")
+            expect(result).not.toContain("no effect")
+        })
+
+        it("shows teleport destination for teleport outcomes", () => {
+            const { playerSquaddieId: liniId } = createSimplePlayerVsEnemyMission()
+
+            const forecasts: SerializedForecastedActionResult[] = [
+                {
+                    battleSquaddieId: liniId,
+                    degreeOfSuccess: DegreeOfSuccess.SUCCESS,
+                    chanceOutOf36: 36,
+                    squaddieActionResults: [
+                        {
+                            inBattleSquaddieId: liniId.inBattleSquaddieId,
+                            outOfBattleSquaddieId: liniId.outOfBattleSquaddieId,
+                            movement: {
+                                expectedPath: CoordinateMovePathService.new({
+                                    steps: [
+                                        { row: 4, col: 1, moveType: CoordinateMovePathMoveType.START, moveCost: 0 },
+                                    ],
+                                }),
+                            },
+                        },
+                    ],
+                },
+            ]
+
+            const result = SquaddieActionInspector.formatForecast(forecasts, "Fracta")
+            expect(result).toContain("teleported to (4, 1)")
+            expect(result).not.toContain("pulled")
+            expect(result).not.toContain("no effect")
         })
     })
 })

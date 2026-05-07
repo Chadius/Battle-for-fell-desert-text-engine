@@ -1365,6 +1365,51 @@ describe("processCommand", () => {
         })
     })
 
+    describe("Gravity Pull action — actor is the aim coordinate", () => {
+        // Vale starts at (5,1); demons at (5,0), (4,4), (1,5), (2,5).
+        // Gravity Pull (A1, sorted before Rescue) uses actorIsAimCoordinate: the aim
+        // coordinate is always Vale's own position, so no target selection step is needed.
+        const setupValeWithGravityPull = () => {
+            // Use [4,4] rolls so targets get SUCCESS (not BOTCH) on their saving throw,
+            // avoiding the "results must have at least one entry" error.
+            const allFoursQueue = Array<number>(40).fill(4)
+            const { engine, valeId } = createMovementMissionEngine(
+                new RollGenerator(allFoursQueue)
+            )
+            const context: CommandContext = {
+                selectedSquaddieId: valeId,
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+            }
+            return { engine, context, valeId }
+        }
+
+        it("A1 (Gravity Pull) skips SELECTING_TARGET and enters CONFIRMING_ACTION directly", () => {
+            const { engine, context } = setupValeWithGravityPull()
+            const result = processCommand("A1", engine, context)
+            expect(result.action).toBe("executeAction")
+            expect(result.updatedContext?.interactionPhase).toBe(
+                InteractionPhase.CONFIRMING_ACTION
+            )
+        })
+
+        it("CONFIRMING_ACTION message prompts to confirm or cancel", () => {
+            const { engine, context } = setupValeWithGravityPull()
+            const result = processCommand("A1", engine, context)
+            expect(result.message).toContain("Press Y to confirm or N/C to cancel")
+        })
+
+        it("pressing Y after A1 (Gravity Pull) executes the action and returns to BROWSING", () => {
+            const { engine, context } = setupValeWithGravityPull()
+            const result = processCommand("A1", engine, context)
+            const confirmResult = processCommand("Y", engine, result.updatedContext!)
+            expect(confirmResult.action).toBe("executeAction")
+            expect(confirmResult.updatedContext?.interactionPhase).toBe(
+                InteractionPhase.BROWSING
+            )
+        })
+    })
+
     describe("Teleport action — Rescue (Vale rescues Fracta)", () => {
         // Map layout: Fracta at (2,2), Vale at (5,1), Demons at (1,5) and (2,5).
         // Vale's Rescue action: targets a friend within MEDIUM range, places them within

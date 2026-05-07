@@ -5,13 +5,14 @@ import {
 } from "../../logic/src/testUtils/mission/movementTestMission.js"
 import type { BattleSquaddieId } from "../../logic/src/squaddie/inBattle/battleSquaddieId.js"
 import { MissionAffiliationTurn } from "../../logic/src/mission/missionTurn.js"
+import type { RollGenerator } from "../../logic/src/squaddieAction/calculate/roll/rollGenerator.js"
 
 export { MovementTestMissionIds }
 
 // Creates a MissionEngine for the movement test mission (Vale and Fracta as PLAYER squaddies
 // vs Slither Demons as ENEMY squaddies) and advances it to PLAYER_TURN.
 // Returns the engine and the in-battle IDs for Vale and Fracta.
-export function createMovementMissionEngine(): {
+export function createMovementMissionEngine(rollGenerator?: RollGenerator): {
     engine: MissionEngine
     valeId: BattleSquaddieId
     fractaId: BattleSquaddieId
@@ -19,7 +20,7 @@ export function createMovementMissionEngine(): {
     const { missionManager, valeSquaddieId, fractaSquaddieId } =
         createMovementTestMission()
 
-    const engine = new MissionEngine(missionManager)
+    const engine = new MissionEngine(missionManager, rollGenerator)
 
     // Advance past TURN_START and PLAYER_TURN_START to reach PLAYER_TURN.
     while (
