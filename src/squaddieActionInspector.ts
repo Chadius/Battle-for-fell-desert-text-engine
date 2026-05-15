@@ -154,28 +154,40 @@ const formatDegreeLabel = (degree: TDegreeOfSuccess): string => {
 const formatModifierBreakdown = (
     breakdown: ActionModifierBreakdown
 ): string => {
-    const { actorProficiencyBonus, targetDefensiveBonus, multipleAttackPenalty, netModifier } =
-        breakdown
+    const {
+        actorProficiencyBonus,
+        targetDefensiveBonus,
+        multipleAttackPenalty,
+        netModifier,
+        isFlankingTarget,
+    } = breakdown
 
-    const proficiencyStr =
-        actorProficiencyBonus === 0
-            ? "proficiency ±0"
-            : `proficiency ${actorProficiencyBonus >= 0 ? "+" : ""}${actorProficiencyBonus}`
-    const defenseStr =
-        targetDefensiveBonus === 0
-            ? "defense ±0"
-            : `defense -${targetDefensiveBonus}`
-    const mapStr =
-        multipleAttackPenalty === 0
-            ? "MAP ±0"
-            : `MAP -${multipleAttackPenalty}`
+    const formatNumber = (bonus: number): string => {
+        if (bonus > 0) {
+            return `+${bonus}`
+        }
+        if (bonus < 0) {
+            return `${bonus}`
+        }
+        return `±0`
+    }
+
+    const proficiencyStr = "proficiency " + formatNumber(actorProficiencyBonus)
+    const defenseStr = "defense " + formatNumber(targetDefensiveBonus)
+    const mapStr = "MAP " + formatNumber(multipleAttackPenalty)
+
+    const parts = [proficiencyStr, defenseStr, mapStr]
+    if (isFlankingTarget) parts.push("flanking")
 
     const netStr =
         netModifier === 0
             ? "±0"
             : `${netModifier >= 0 ? "+" : ""}${netModifier}`
-    return `  Attack modifier: ${netStr} (${proficiencyStr}, ${defenseStr}, ${mapStr})`
+    return `  Attack modifier: ${netStr} (${parts.join(", ")})`
 }
+
+const isBreakdownNotable = (breakdown: ActionModifierBreakdown): boolean =>
+    breakdown.multipleAttackPenalty > 0 || breakdown.isFlankingTarget
 
 const formatForecast = (
     forecasts: SerializedForecastedActionResult[],
@@ -183,14 +195,14 @@ const formatForecast = (
 ): string => {
     const lines: string[] = [`Forecast for ${targetName}:`]
 
-    // Display modifier breakdown only when MAP is active (penalty > 0)
-    const firstWithMapPenalty = forecasts.find(
+    // Display modifier breakdown when MAP is active or when flanking the target
+    const firstNotable = forecasts.find(
         (f) =>
             f.modifierBreakdown != undefined &&
-            f.modifierBreakdown.multipleAttackPenalty > 0
+            isBreakdownNotable(f.modifierBreakdown)
     )
-    if (firstWithMapPenalty?.modifierBreakdown != undefined) {
-        lines.push(formatModifierBreakdown(firstWithMapPenalty.modifierBreakdown))
+    if (firstNotable?.modifierBreakdown != undefined) {
+        lines.push(formatModifierBreakdown(firstNotable.modifierBreakdown))
     }
 
     for (const forecast of forecasts) {
@@ -214,8 +226,11 @@ const formatForecast = (
 
         let effectDesc = "no effect"
         if (damageResult?.damage != undefined) {
-            const { net, willKo } = damageResult.damage
+            const { net, willKo, sneakAttackDamage } = damageResult.damage
             effectDesc = `${net} damage`
+            if (sneakAttackDamage != undefined && sneakAttackDamage > 0) {
+                effectDesc += ` (incl. ${sneakAttackDamage} sneak attack)`
+            }
             if (willKo) effectDesc += " (will KO)"
         } else if (healingResult?.healing != undefined) {
             effectDesc = `heals ${healingResult.healing.net} HP`

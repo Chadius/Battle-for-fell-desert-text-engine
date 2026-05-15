@@ -38,8 +38,11 @@ const formatDamageLines = (
     name: string
 ): string[] => {
     if (squaddieResult.damage == undefined) return []
-    const {net, absorbed, willKo} = squaddieResult.damage
+    const {net, absorbed, willKo, sneakAttackDamage} = squaddieResult.damage
     let takeDamage: string = `  ${name} takes ${net} damage`
+    if (sneakAttackDamage != undefined && sneakAttackDamage > 0) {
+        takeDamage += ` (incl. ${sneakAttackDamage} sneak attack)`
+    }
     if (absorbed > 0) {
         takeDamage += ` (absorbed ${absorbed}).`
     }

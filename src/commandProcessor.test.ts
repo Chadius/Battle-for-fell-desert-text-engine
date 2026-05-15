@@ -1257,7 +1257,7 @@ describe("processCommand", () => {
             // Undo should fail for a combat action.
             const result = processCommand("Z", engine)
             expect(result.action).toBe("undoAction")
-            expect(result.message).toContain("action cannot be undone")
+            expect(result.message).toContain("action type cannot be undone")
         })
     })
 

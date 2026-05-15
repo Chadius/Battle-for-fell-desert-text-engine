@@ -9,6 +9,7 @@ const conditionTypeDisplayNames: Record<TSquaddieConditionType, string> = {
     [SquaddieConditionType.ABSORB]: "Absorb",
     [SquaddieConditionType.ARMOR]: "Armor",
     [SquaddieConditionType.ELUSIVE]: "Elusive",
+    [SquaddieConditionType.OFF_GUARD]: "Off Guard",
     [SquaddieConditionType.SLOWED]: "Slowed",
     [SquaddieConditionType.HUSTLE]: "Hustle",
 }
