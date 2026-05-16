@@ -37,13 +37,17 @@ describe("squaddieDetailInspector", () => {
         it("maps HUSTLE to Hustle", () => {
             expect(conditionTypeName(SquaddieConditionType.HUSTLE)).toBe("Hustle")
         })
+
+        it("maps FRIGHTENED to Frightened", () => {
+            expect(conditionTypeName(SquaddieConditionType.FRIGHTENED)).toBe("Frightened")
+        })
     })
 
     describe("formatCondition", () => {
         it("formats a numerical condition with amount and duration", () => {
             const condition = SquaddieConditionService.new({
                 type: SquaddieConditionType.ARMOR,
-                amount: 3,
+                amount: { amount: 3 },
                 duration: { duration: 2, decaysAt: SquaddieConditionDecaysAt.TURN_END },
                 source: SquaddieConditionSource.UNKNOWN,
             })
@@ -53,7 +57,7 @@ describe("squaddieDetailInspector", () => {
         it("formats a numerical condition with amount but no duration", () => {
             const condition = SquaddieConditionService.new({
                 type: SquaddieConditionType.SLOWED,
-                amount: 1,
+                amount: { amount: 1 },
                 duration: undefined,
                 source: SquaddieConditionSource.UNKNOWN,
             })
@@ -83,11 +87,21 @@ describe("squaddieDetailInspector", () => {
         it("formats ABSORB with amount and duration", () => {
             const condition = SquaddieConditionService.new({
                 type: SquaddieConditionType.ABSORB,
-                amount: 5,
+                amount: { amount: 5 },
                 duration: { duration: 3, decaysAt: SquaddieConditionDecaysAt.TURN_END },
                 source: SquaddieConditionSource.UNKNOWN,
             })
             expect(formatCondition(condition)).toBe("Absorb: 5 (3 turns remaining)")
+        })
+
+        it("formats FRIGHTENED with amount and duration", () => {
+            const condition = SquaddieConditionService.new({
+                type: SquaddieConditionType.FRIGHTENED,
+                amount: { amount: 1 },
+                duration: { duration: 1, decaysAt: SquaddieConditionDecaysAt.TURN_END },
+                source: SquaddieConditionSource.SPIRITUAL,
+            })
+            expect(formatCondition(condition)).toBe("Frightened: 1 (1 turns remaining)")
         })
     })
 
@@ -101,7 +115,7 @@ describe("squaddieDetailInspector", () => {
             const conditions: SquaddieCondition[] = [
                 SquaddieConditionService.new({
                     type: SquaddieConditionType.ARMOR,
-                    amount: 2,
+                    amount: { amount: 2 },
                     duration: { duration: 3, decaysAt: SquaddieConditionDecaysAt.TURN_END },
                     source: SquaddieConditionSource.UNKNOWN,
                 }),
@@ -114,7 +128,7 @@ describe("squaddieDetailInspector", () => {
             const conditions: SquaddieCondition[] = [
                 SquaddieConditionService.new({
                     type: SquaddieConditionType.ARMOR,
-                    amount: 2,
+                    amount: { amount: 2 },
                     duration: { duration: 3, decaysAt: SquaddieConditionDecaysAt.TURN_END },
                     source: SquaddieConditionSource.UNKNOWN,
                 }),
@@ -126,7 +140,7 @@ describe("squaddieDetailInspector", () => {
                 }),
                 SquaddieConditionService.new({
                     type: SquaddieConditionType.SLOWED,
-                    amount: 1,
+                    amount: { amount: 1 },
                     duration: undefined,
                     source: SquaddieConditionSource.UNKNOWN,
                 }),

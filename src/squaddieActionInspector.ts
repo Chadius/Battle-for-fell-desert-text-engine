@@ -160,6 +160,8 @@ const formatModifierBreakdown = (
         multipleAttackPenalty,
         netModifier,
         isFlankingTarget,
+        actorFrightenedPenalty,
+        targetFrightenedPenalty,
     } = breakdown
 
     const formatNumber = (bonus: number): string => {
@@ -174,10 +176,14 @@ const formatModifierBreakdown = (
 
     const proficiencyStr = "proficiency " + formatNumber(actorProficiencyBonus)
     const defenseStr = "defense " + formatNumber(targetDefensiveBonus)
-    const mapStr = "MAP " + formatNumber(multipleAttackPenalty)
+    const mapStr = "MAP " + formatNumber(-multipleAttackPenalty)
 
     const parts = [proficiencyStr, defenseStr, mapStr]
     if (isFlankingTarget) parts.push("flanking")
+    if (actorFrightenedPenalty != undefined && actorFrightenedPenalty > 0)
+        parts.push(`actor frightened -${actorFrightenedPenalty}`)
+    if (targetFrightenedPenalty != undefined && targetFrightenedPenalty > 0)
+        parts.push(`target frightened +${targetFrightenedPenalty}`)
 
     const netStr =
         netModifier === 0
@@ -187,7 +193,10 @@ const formatModifierBreakdown = (
 }
 
 const isBreakdownNotable = (breakdown: ActionModifierBreakdown): boolean =>
-    breakdown.multipleAttackPenalty > 0 || breakdown.isFlankingTarget
+    breakdown.multipleAttackPenalty > 0 ||
+    breakdown.isFlankingTarget ||
+    (breakdown.actorFrightenedPenalty != undefined && breakdown.actorFrightenedPenalty > 0) ||
+    (breakdown.targetFrightenedPenalty != undefined && breakdown.targetFrightenedPenalty > 0)
 
 const formatForecast = (
     forecasts: SerializedForecastedActionResult[],

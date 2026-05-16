@@ -487,7 +487,7 @@ describe("squaddieActionInspector", () => {
                             conditionsAdded: [
                                 SquaddieConditionService.new({
                                     type: SquaddieConditionType.ARMOR,
-                                    amount: 1,
+                                    amount: { amount: 1 },
                                     duration: {
                                         duration: 2,
                                         decaysAt: SquaddieConditionDecaysAt.TURN_END,
@@ -608,6 +608,54 @@ describe("squaddieActionInspector", () => {
 
             const result = SquaddieActionInspector.formatForecast(forecasts, "Slither Demon")
             expect(result).toContain("MAP -6")
+            expect(result).toContain("Attack modifier:")
+        })
+
+        it("shows actor frightened penalty in modifier breakdown", () => {
+            const { playerSquaddieId: liniId } = createSimplePlayerVsEnemyMission()
+
+            const forecasts: SerializedForecastedActionResult[] = [
+                {
+                    battleSquaddieId: liniId,
+                    degreeOfSuccess: DegreeOfSuccess.SUCCESS,
+                    chanceOutOf36: 15,
+                    squaddieActionResults: [],
+                    modifierBreakdown: {
+                        actorProficiencyBonus: 3,
+                        targetDefensiveBonus: 1,
+                        multipleAttackPenalty: 0,
+                        netModifier: 0,
+                        actorFrightenedPenalty: 2,
+                    },
+                },
+            ]
+
+            const result = SquaddieActionInspector.formatForecast(forecasts, "Slither Demon")
+            expect(result).toContain("actor frightened -2")
+            expect(result).toContain("Attack modifier:")
+        })
+
+        it("shows target frightened penalty in modifier breakdown", () => {
+            const { playerSquaddieId: liniId } = createSimplePlayerVsEnemyMission()
+
+            const forecasts: SerializedForecastedActionResult[] = [
+                {
+                    battleSquaddieId: liniId,
+                    degreeOfSuccess: DegreeOfSuccess.SUCCESS,
+                    chanceOutOf36: 21,
+                    squaddieActionResults: [],
+                    modifierBreakdown: {
+                        actorProficiencyBonus: 3,
+                        targetDefensiveBonus: 1,
+                        multipleAttackPenalty: 0,
+                        netModifier: 1,
+                        targetFrightenedPenalty: 1,
+                    },
+                },
+            ]
+
+            const result = SquaddieActionInspector.formatForecast(forecasts, "Slither Demon")
+            expect(result).toContain("target frightened +1")
             expect(result).toContain("Attack modifier:")
         })
 

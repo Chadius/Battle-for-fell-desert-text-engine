@@ -91,7 +91,7 @@ describe("TextMissionRunner", () => {
                     conditions: [
                         SquaddieConditionService.new({
                             type: SquaddieConditionType.ARMOR,
-                            amount: 2,
+                            amount: { amount: 2 },
                             duration: {
                                 duration: 1,
                                 decaysAt: SquaddieConditionDecaysAt.TURN_END,

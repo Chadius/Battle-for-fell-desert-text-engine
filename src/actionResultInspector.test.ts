@@ -225,7 +225,7 @@ describe("ActionResultInspector", () => {
                                             duration: 1,
                                             decaysAt: SquaddieConditionDecaysAt.TURN_START,
                                         },
-                                        amount: 1,
+                                        amount: { amount: 1 },
                                         source: SquaddieConditionSource.PHYSICAL,
                                     }),
                                 ],
@@ -240,6 +240,44 @@ describe("ActionResultInspector", () => {
                 engine
             )
             expect(result).toContain(`gains ${SquaddieConditionType.SLOWED} 1 for 1 turn`)
+        })
+
+        it("shows FRIGHTENED condition added to a target", () => {
+            const engine = new MissionEngineTestHarness()
+            const slitherDemonId = engine.getSlitherDemonSquaddieId()
+
+            const actionResult: ActionResult = {
+                targetResults: {
+                    "slither-key": {
+                        degreeOfSuccess: DegreeOfSuccess.SUCCESS,
+                        squaddieActionResults: [
+                            {
+                                inBattleSquaddieId:
+                                    slitherDemonId.inBattleSquaddieId,
+                                outOfBattleSquaddieId:
+                                    slitherDemonId.outOfBattleSquaddieId,
+                                conditionsAdded: [
+                                    SquaddieConditionService.new({
+                                        type: SquaddieConditionType.FRIGHTENED,
+                                        duration: {
+                                            duration: 1,
+                                            decaysAt: SquaddieConditionDecaysAt.TURN_END,
+                                        },
+                                        amount: { amount: 1 },
+                                        source: SquaddieConditionSource.SPIRITUAL,
+                                    }),
+                                ],
+                            },
+                        ],
+                    },
+                },
+            }
+
+            const result = ActionResultInspector.formatActionResults(
+                actionResult,
+                engine
+            )
+            expect(result).toContain(`gains ${SquaddieConditionType.FRIGHTENED} 1 for 1 turn`)
         })
 
         it("omits Result line when action has only one degree of success", () => {
