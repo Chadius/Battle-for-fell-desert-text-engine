@@ -27,17 +27,32 @@ const parseArgv = (argv: string[]): { debugFlagNames: (keyof DebugFlags)[] } => 
     return { debugFlagNames }
 }
 
-// Loads the test harness mission via JSON round-trip. Prints errors and exits if the state is invalid.
+// Loads the test harness mission by supplying serialized resources to a plain MissionEngine.
 function loadTestHarnessMission(rl: readline.Interface): MissionEngine {
-    const engine = new MissionEngineTestHarness()
-    const serialized = MissionEngineTestHarness.serializeMissionState()
-    const { isValid, errors } = engine.loadMissionStateFromJson(serialized)
-    if (!isValid) {
+    const engine = new MissionEngine()
+
+    const loadResult = engine.loadMissionFromJson({
+        squaddies: MissionEngineTestHarness.serializeSquaddies(),
+        attributeSheets: MissionEngineTestHarness.serializeAttributeSheets(),
+        maps: MissionEngineTestHarness.serializeMaps(),
+        actions: MissionEngineTestHarness.serializeActions(),
+        missionState: MissionEngineTestHarness.serializeMissionState(),
+    })
+    if (!loadResult.isValid) {
         console.error("Mission failed to load:")
-        errors.forEach((e) => console.error(` - ${e}`))
+        loadResult.errors.forEach((e) => console.error(` - ${e}`))
         rl.close()
         process.exit(1)
     }
+
+    const finalizeResult = engine.finalizeLoadingMission()
+    if (!finalizeResult.isValid) {
+        console.error("Mission failed to finalize:")
+        finalizeResult.errors.forEach((e) => console.error(` - ${e}`))
+        rl.close()
+        process.exit(1)
+    }
+
     return engine
 }
 
