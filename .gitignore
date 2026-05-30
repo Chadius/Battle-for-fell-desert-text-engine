@@ -1,5 +1,6 @@
 *.log
 /node_modules/
+/campaignData/
 .idea/
 package-lock.json
 dist/
