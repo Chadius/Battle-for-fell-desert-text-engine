@@ -8,6 +8,8 @@ import type { DebugFlags } from "../logic/src/mission/debugFlags.js"
 import { DEBUG_FLAG_NAMES } from "./commandProcessor.js"
 import {
     CAMPAIGN_DATA_FOLDER,
+    CAMPAIGNS_SUBFOLDER,
+    MAIN_CAMPAIGN_FOLDER,
     MISSIONS_SUBFOLDER,
     listAvailableMissions,
     loadMissionFromFolder,
@@ -90,11 +92,12 @@ async function promptMissionSelection(
     })
 }
 
-// Tries to load a mission from campaignData/missions/. Falls back to the test harness if the
-// folder is absent or empty.
+// Tries to load a mission from campaignData/campaigns/main/missions/. Falls back to the test
+// harness if the folder is absent or empty.
 async function selectAndLoadMission(rl: readline.Interface): Promise<MissionEngine> {
     const campaignDataPath = join(process.cwd(), CAMPAIGN_DATA_FOLDER)
-    const missionsPath = join(campaignDataPath, MISSIONS_SUBFOLDER)
+    const campaignFolderPath = join(campaignDataPath, CAMPAIGNS_SUBFOLDER, MAIN_CAMPAIGN_FOLDER)
+    const missionsPath = join(campaignFolderPath, MISSIONS_SUBFOLDER)
 
     if (!existsSync(campaignDataPath)) {
         console.warn("[index] Warning: campaignData folder not found. Loading default test harness mission.")
@@ -103,15 +106,15 @@ async function selectAndLoadMission(rl: readline.Interface): Promise<MissionEngi
 
     const missionNames = listAvailableMissions(missionsPath)
     if (missionNames.length === 0) {
-        console.warn("[index] Warning: No missions found in campaignData/missions. Loading default test harness mission.")
+        console.warn("[index] Warning: No missions found in campaignData/campaigns/main/missions. Loading default test harness mission.")
         return loadTestHarnessMission(rl)
     }
 
     const selected = await promptMissionSelection(rl, missionNames)
-    const folderPath = join(missionsPath, selected)
+    const missionFolderPath = join(missionsPath, selected)
 
     const engine = new MissionEngine()
-    const result = loadMissionFromFolder(engine, folderPath)
+    const result = loadMissionFromFolder(engine, campaignFolderPath, missionFolderPath)
     if (!result.isValid) {
         console.error(`Mission "${selected}" failed to load:`)
         result.errors.forEach((e) => console.error(` - ${e}`))

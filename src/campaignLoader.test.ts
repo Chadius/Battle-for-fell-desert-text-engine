@@ -3,8 +3,9 @@ import { join } from "node:path"
 import { listAvailableMissions, loadMissionFromFolder } from "./campaignLoader.js"
 import { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
 
-// campaignData/missions lives at the project root (one level above src/).
-const campaignMissionsPath = join(process.cwd(), "campaignData", "missions")
+// campaignData/campaigns/main lives at the project root (one level above src/).
+const campaignFolderPath = join(process.cwd(), "campaignData", "campaigns", "main")
+const campaignMissionsPath = join(campaignFolderPath, "missions")
 
 describe("campaignLoader", () => {
     describe("listAvailableMissions", () => {
@@ -28,16 +29,16 @@ describe("campaignLoader", () => {
     describe("loadMissionFromFolder", () => {
         it("loads and validates the testHarness mission successfully", () => {
             const engine = new MissionEngine()
-            const folderPath = join(campaignMissionsPath, "testHarness")
-            const result = loadMissionFromFolder(engine, folderPath)
+            const missionFolderPath = join(campaignMissionsPath, "testHarness")
+            const result = loadMissionFromFolder(engine, campaignFolderPath, missionFolderPath)
             expect(result.errors).toEqual([])
             expect(result.isValid).toBe(true)
         })
 
         it("allows the engine to report phase info after loading", () => {
             const engine = new MissionEngine()
-            const folderPath = join(campaignMissionsPath, "testHarness")
-            loadMissionFromFolder(engine, folderPath)
+            const missionFolderPath = join(campaignMissionsPath, "testHarness")
+            loadMissionFromFolder(engine, campaignFolderPath, missionFolderPath)
             expect(engine.getCurrentAffiliationTurn()).toBeDefined()
         })
     })
