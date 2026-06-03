@@ -9,8 +9,11 @@ import { MissionObjectiveInspector } from "./missionObjectiveInspector.js"
 import { conditionTypeName } from "./squaddieDetailInspector.js"
 import {
     MissionAffiliationTurn,
+    MissionTurnService,
     type TMissionAffiliationTurn,
 } from "../logic/src/mission/missionTurn.js"
+import type { TSquaddieAffiliation } from "../logic/src/affiliation/affiliation.js"
+import { renderMap, type MapRenderInfo } from "./mapRenderer.js"
 import { EnemyAI } from "./enemyAI.js"
 import {MissionObjectiveRewardType, TMissionObjectiveRewardType} from "../logic/src/mission/missionObjectiveReward.js"
 import type { MissionObjective } from "../logic/src/mission/missionObjective.js"
@@ -28,6 +31,7 @@ export class TextMissionRunner {
     private readonly initialPhaseMessages: string[]
     private lastKnownInteractivePhase: TMissionAffiliationTurn | undefined =
         undefined
+    private overlayMap: string | undefined = undefined
 
     constructor(engine: MissionEngine) {
         this.engine = engine
@@ -63,11 +67,52 @@ export class TextMissionRunner {
         return lines.join("\n")
     }
 
+    // Returns the overlay map (with target/movement highlights) when one is active, otherwise the
+    // plain map. Used by the split-pane UI to refresh the left panel after each command.
+    getMapText(): string {
+        if (this.overlayMap != undefined) {
+            return this.overlayMap
+        }
+        const overview = this.engine.getMapOverview()
+        const summary = this.engine.getSerializedInMissionSummary()
+        const turnNumber = this.engine.getCurrentTurnNumber()
+        const affiliationTurn = this.engine.getCurrentAffiliationTurn()
+        const currentAffiliation =
+            MissionTurnService.getSquaddieAffiliationForAffiliationTurn(affiliationTurn)
+
+        const squaddieAffiliations = new Map<string, TSquaddieAffiliation>()
+        for (const row of overview.tiles) {
+            for (const tile of row) {
+                if (tile.squaddieId != undefined) {
+                    const info = this.engine.getSquaddieInfo(tile.squaddieId)
+                    squaddieAffiliations.set(tile.squaddieId.outOfBattleSquaddieId, info.affiliation)
+                }
+            }
+        }
+
+        const objectiveEntries = MissionObjectiveInspector.gatherEntries(this.engine)
+        const objectivesDisplay = MissionObjectiveInspector.formatEntries(objectiveEntries)
+        const renderInfo: MapRenderInfo = {
+            turnNumber,
+            currentAffiliation,
+            squaddieAffiliations,
+            objectivesDisplay: objectivesDisplay.length > 0 ? objectivesDisplay : undefined,
+            mapName: summary.mapName,
+        }
+        return renderMap(overview, renderInfo)
+    }
+
     processInput(input: string): ProcessInputResult {
         const result = processCommand(input, this.engine, this.context)
 
         if (result.updatedContext != undefined) {
             this.context = result.updatedContext
+        }
+
+        if (result.mapText != undefined) {
+            this.overlayMap = result.mapText
+        } else if (this.context.interactionPhase === InteractionPhase.BROWSING) {
+            this.overlayMap = undefined
         }
 
         const phaseMessages = this.advanceToInteractivePhase()

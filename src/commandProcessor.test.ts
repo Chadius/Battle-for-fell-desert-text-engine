@@ -661,7 +661,7 @@ describe("processCommand", () => {
             const { engine, context } = setupPlayerTurnWithLini()
             const result = processCommand("AM", engine, context)
             expect(result.action).toBe("moveSquaddie")
-            expect(result.message).toMatch(/[123]/)
+            expect(result.mapText).toMatch(/[123]/)
         })
 
         it("sets context to SELECTING_TARGET after AM command", () => {
@@ -959,18 +959,18 @@ describe("processCommand", () => {
                 )
             })
 
-            it("CONFIRMING_ACTION message includes the map with HT marker on the target", () => {
+            it("CONFIRMING_ACTION map includes the HT marker on the target", () => {
                 const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
                 const result = processCommand("A3", engine, context)
-                expect(result.message).toContain("HT")
+                expect(result.mapText).toContain("HT")
             })
 
             // Scimitar targets an adjacent cell — no intermediate line cells exist,
             // so "//" markers only appear for actions with multi-step range.
-            it("CONFIRMING_ACTION message does not include // for a 1-step melee action", () => {
+            it("CONFIRMING_ACTION map does not include // for a 1-step melee action", () => {
                 const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
                 const result = processCommand("A3", engine, context)
-                expect(result.message).not.toContain("//")
+                expect(result.mapText).not.toContain("//")
             })
 
             // Forecast message should always include the confirmation prompt
@@ -1312,21 +1312,21 @@ describe("processCommand", () => {
             )
         })
 
-        it("CONFIRMING_ACTION message includes the map with HT markers on hit targets", () => {
+        it("CONFIRMING_ACTION map includes HT markers on hit targets", () => {
             const { engine, context } = setupValeWithLightningBoltInRange()
             const selectResult = processCommand("A2", engine, context)
             const aimResult = processCommand("2, 8", engine, selectResult.updatedContext!)
-            expect(aimResult.message).toContain("HT")
+            expect(aimResult.mapText).toContain("HT")
         })
 
-        it("CONFIRMING_ACTION message includes // markers on line path cells", () => {
+        it("CONFIRMING_ACTION map includes // markers on line path cells", () => {
             const { engine, context } = setupValeWithLightningBoltInRange()
             const selectResult = processCommand("A2", engine, context)
             const aimResult = processCommand("2, 8", engine, selectResult.updatedContext!)
-            expect(aimResult.message).toContain("//")
+            expect(aimResult.mapText).toContain("//")
         })
 
-        it("CONFIRMING_ACTION message does not mark friendly squaddies as HT", () => {
+        it("CONFIRMING_ACTION map does not mark friendly squaddies as HT", () => {
             // Gloria is at (3,0), off the line of fire. She should never appear as HT.
             // Previously a bug caused squaddies sharing inBattleSquaddieId=0 (Vale, Gloria,
             // and Demon 0 all have index 0 within their outOfBattleSquaddieId bucket) to all
@@ -1338,7 +1338,7 @@ describe("processCommand", () => {
 
             // The line from Vale at (2,2) to aim (2,8) hits exactly 3 demons at (2,6), (2,7), (2,8).
             // Vale and Gloria must NOT be counted. Without the fix, 5 markers appeared (Vale + Gloria + 3 demons).
-            const htCount = (aimResult.message.match(/HT/g) ?? []).length
+            const htCount = (aimResult.mapText?.match(/HT/g) ?? []).length
             expect(htCount).toBe(3)
         })
 

@@ -64,8 +64,8 @@ describe("TextMissionRunner", () => {
             const runner = new TextMissionRunner(engine)
 
             runner.processInput("0, 0")
-            const result = runner.processInput("AM")
-            expect(result.text).toMatch(/[123]/)
+            runner.processInput("AM")
+            expect(runner.getMapText()).toMatch(/[123]/)
         })
 
         it("shows moves to message and route map after entering a valid destination", () => {

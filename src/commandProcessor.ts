@@ -68,6 +68,7 @@ export interface CommandContext {
 export interface CommandResult {
     action: CommandAction
     message: string
+    mapText?: string
     updatedContext?: CommandContext
 }
 
@@ -576,7 +577,8 @@ const handleInitiateCombatActionWith1Target = (targetIds: BattleSquaddieId[], en
 
     return {
         action: "executeAction",
-        message: mapText + "\n" + forecastText + "\nPress Y to confirm or N/C to cancel.",
+        mapText,
+        message: forecastText + "\nPress Y to confirm or N/C to cancel.",
         updatedContext: {
             selectedSquaddieId: actingSquaddieId,
             interactionPhase: InteractionPhase.CONFIRMING_ACTION,
@@ -636,7 +638,8 @@ const handleInitiateCombatActionWithActorAsAimCoordinate = (
 
     return {
         action: "executeAction",
-        message: mapText + "\n" + forecastText + "\nPress Y to confirm or N/C to cancel.",
+        mapText,
+        message: forecastText + "\nPress Y to confirm or N/C to cancel.",
         updatedContext: {
             selectedSquaddieId: actingSquaddieId,
             interactionPhase: InteractionPhase.CONFIRMING_ACTION,
@@ -684,7 +687,8 @@ const handleInitiateCombatAction = (
         const mapText = renderMap(overview, { turnNumber, currentAffiliation, squaddieAffiliations, tileOverlays })
         return {
             action: "executeAction",
-            message: `${mapText}\n${actorInfo.name}: Select aim coordinate (or enter invalid coordinate to cancel):`,
+            mapText,
+            message: `${actorInfo.name}: Select aim coordinate (or enter invalid coordinate to cancel):`,
             updatedContext: {
                 selectedSquaddieId: actingSquaddieId,
                 interactionPhase: InteractionPhase.SELECTING_TARGET,
@@ -743,10 +747,11 @@ const handleInitiateCombatAction = (
     }
 
     const mapText = renderMap(overview, renderInfo)
-    const message = `${mapText}\n${actorInfo.name}: Select target (or enter invalid coordinate to cancel):`
+    const message = `${actorInfo.name}: Select target (or enter invalid coordinate to cancel):`
 
     return {
         action: "executeAction",
+        mapText,
         message,
         updatedContext: {
             selectedSquaddieId: actingSquaddieId,
@@ -866,7 +871,8 @@ const handleCombatActionTargetSelection = (
 
     return {
         action: "executeAction",
-        message: mapText + "\n" + forecastText + "\nPress Y to confirm or N/C to cancel.",
+        mapText,
+        message: forecastText + "\nPress Y to confirm or N/C to cancel.",
         updatedContext: {
             selectedSquaddieId: actingSquaddieId,
             interactionPhase: InteractionPhase.CONFIRMING_ACTION,
@@ -1067,10 +1073,11 @@ const handleInitiateActorChosenMovementAction = (
 
     const mapText = renderMap(overview, renderInfo)
     const actionDef = engine.getActionById(actionId)
-    const message = `${mapText}\n${info.name}: Select destination for ${actionDef.name} (or enter invalid coordinate to cancel):`
+    const message = `${info.name}: Select destination for ${actionDef.name} (or enter invalid coordinate to cancel):`
 
     return {
         action: "executeAction",
+        mapText,
         message,
         updatedContext: {
             selectedSquaddieId: actingSquaddieId,
@@ -1173,10 +1180,11 @@ const handleActorChosenMovementTargetSelection = (
     const apRemaining = infoAfter.currentActionPoints
 
     const actionDef = engine.getActionById(context.pendingActionId!)
-    const message = `${info.name} uses ${actionDef.name} to move to (${desiredTargetCoordinate.row}, ${desiredTargetCoordinate.col}), spending ${apSpent} AP (${apRemaining} remaining).\n${routeMap}`
+    const message = `${info.name} uses ${actionDef.name} to move to (${desiredTargetCoordinate.row}, ${desiredTargetCoordinate.col}), spending ${apSpent} AP (${apRemaining} remaining).`
 
     return {
         action: "moveSquaddie",
+        mapText: routeMap,
         message,
         updatedContext: {
             selectedSquaddieId: undefined,
@@ -1233,7 +1241,8 @@ const handleAfterTeleportPrimaryTargetSelected = (
 
     return {
         action: "executeAction",
-        message: `${mapText}\n${actorName} will use ${actionDef.name} on ${targetName}.\nSelect destination (or enter invalid coordinate to cancel):`,
+        mapText,
+        message: `${actorName} will use ${actionDef.name} on ${targetName}.\nSelect destination (or enter invalid coordinate to cancel):`,
         updatedContext: {
             selectedSquaddieId: actorId,
             interactionPhase: InteractionPhase.SELECTING_TARGET,
@@ -1331,7 +1340,8 @@ const handleTeleportDestinationSelection = (
 
     return {
         action: "executeAction",
-        message: `${mapText}\n${actorName} will use ${actionDef.name} on ${targetName} → (${desiredDestination.row}, ${desiredDestination.col}).\n${forecastText}\nPress Y to confirm or N/C to cancel.`,
+        mapText,
+        message: `${actorName} will use ${actionDef.name} on ${targetName} → (${desiredDestination.row}, ${desiredDestination.col}).\n${forecastText}\nPress Y to confirm or N/C to cancel.`,
         updatedContext: {
             selectedSquaddieId: actorId,
             interactionPhase: InteractionPhase.CONFIRMING_ACTION,
@@ -1370,10 +1380,11 @@ const handleInitiateMovement = (
     }
 
     const mapText = renderMap(overview, renderInfo)
-    const message = `${mapText}\n${info.name}: Select destination (or enter invalid coordinate to cancel):`
+    const message = `${info.name}: Select destination (or enter invalid coordinate to cancel):`
 
     return {
         action: "moveSquaddie",
+        mapText,
         message,
         updatedContext: {
             selectedSquaddieId: squaddieId,
