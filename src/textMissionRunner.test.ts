@@ -1,12 +1,57 @@
 import { describe, it, expect } from "vitest"
 import { TextMissionRunner } from "./textMissionRunner.js"
-import { MissionEngineTestHarness } from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
+import {
+    MissionEngineTestHarness,
+    MissionEngineTestHarnessIds,
+} from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
 import {
     SquaddieConditionDecaysAt,
     SquaddieConditionService,
     SquaddieConditionSource,
     SquaddieConditionType,
 } from "../logic/src/proficiency/squaddieCondition.js"
+import type { Movie } from "../logic/src/movie/movie.js"
+import { MovieSceneType } from "../logic/src/movie/movieScene.js"
+import { MovieSceneImageService } from "../logic/src/movie/movieSceneImage.js"
+import { MissionObjectiveService } from "../logic/src/mission/missionObjective.js"
+import { MissionObjectiveRewardService } from "../logic/src/mission/missionObjectiveReward.js"
+import { MissionObjectiveCriteriaService } from "../logic/src/mission/missionObjectiveCriteria.js"
+import { SquaddieAffiliation } from "../logic/src/affiliation/affiliation.js"
+
+// Minimal single-IMAGE-scene movie. No caption or description, so
+// currentSceneText() returns only the "[Enter/N to continue, S to stop movie]" prompt.
+const makeImageMovie = (): Movie => ({
+    id: "test-movie",
+    firstSceneId: "scene-1",
+    scenes: [
+        {
+            type: MovieSceneType.IMAGE,
+            data: MovieSceneImageService.new({
+                id: "scene-1",
+                resourceManifestEntryId: "placeholder",
+            }),
+        },
+    ],
+})
+
+// Single CONVERSATION scene with the given dialog lines (en-us text strings).
+const makeConversationMovie = (lines: string[]): Movie => ({
+    id: "test-movie",
+    firstSceneId: "scene-1",
+    scenes: [
+        {
+            type: MovieSceneType.CONVERSATION,
+            data: {
+                id: "scene-1",
+                nextSceneId: undefined,
+                lines: lines.map((text) => ({
+                    type: "DIALOG" as const,
+                    text: { "en-us": { text } },
+                })),
+            },
+        },
+    ],
+})
 
 describe("TextMissionRunner", () => {
     describe("getWelcomeText", () => {
@@ -147,6 +192,95 @@ describe("TextMissionRunner", () => {
         })
     })
 
+    describe("movie mode", () => {
+        describe("when a PLAY_MOVIE reward is triggered by completing an objective", () => {
+            it("shows the first movie scene instead of ending the mission immediately", () => {
+                const { runner, engine } = makeRunnerWithVictoryMovieObjective("Victory scene")
+                // Select Lini while the enemy is still alive so no mission completion fires yet
+                runner.processInput("0, 0")
+                // Kill the enemy after context is set; AE will then trigger the PLAY_MOVIE reward
+                engine.defeatSlitherDemon()
+
+                const result = runner.processInput("AE")
+
+                expect(result.text).toContain("Victory scene")
+            })
+        })
+
+        describe("when a movie is playing", () => {
+            it("shows the movie scene prompt when a game command is sent during movie playback", () => {
+                const engine = new MissionEngineTestHarness()
+                const runner = new TextMissionRunner(engine)
+                engine.playMovie(makeImageMovie(), [])
+
+                const result = runner.processInput("M")
+
+                expect(result.text).toContain("[Enter/N to continue, S to stop movie]")
+            })
+
+            it("advances to the next dialog line when Enter is sent", () => {
+                const engine = new MissionEngineTestHarness()
+                const runner = new TextMissionRunner(engine)
+                engine.playMovie(makeConversationMovie(["First line", "Second line"]), [])
+
+                const result = runner.processInput("")
+
+                expect(result.text).toContain("Second line")
+            })
+
+            it("advances to the next dialog line when N is sent", () => {
+                const engine = new MissionEngineTestHarness()
+                const runner = new TextMissionRunner(engine)
+                engine.playMovie(makeConversationMovie(["First line", "Second line"]), [])
+
+                const result = runner.processInput("N")
+
+                expect(result.text).toContain("Second line")
+            })
+
+            it("quits immediately when Q is sent", () => {
+                const engine = new MissionEngineTestHarness()
+                const runner = new TextMissionRunner(engine)
+                engine.playMovie(makeConversationMovie(["First line", "Second line"]), [])
+
+                const result = runner.processInput("Q")
+
+                expect(result.shouldQuit).toBe(true)
+            })
+
+            it("shows the mission summary and quits when the last dialog line is confirmed and the mission is done", () => {
+                const engine = new MissionEngineTestHarness()
+                const runner = new TextMissionRunner(engine)
+                engine.defeatSlitherDemon()
+                engine.markMissionObjectiveAsRewarded(
+                    MissionEngineTestHarnessIds.objectives.defeatAllEnemies
+                )
+                // Single-line movie — confirming it ends the movie immediately
+                engine.playMovie(makeConversationMovie(["Victory scene"]), [])
+
+                const result = runner.processInput("")
+
+                expect(result.shouldQuit).toBe(true)
+                expect(result.text).toContain("Mission Complete!")
+            })
+
+            it("stops the movie and shows the mission summary when S is sent and the mission is done", () => {
+                const engine = new MissionEngineTestHarness()
+                const runner = new TextMissionRunner(engine)
+                engine.defeatSlitherDemon()
+                engine.markMissionObjectiveAsRewarded(
+                    MissionEngineTestHarnessIds.objectives.defeatAllEnemies
+                )
+                engine.playMovie(makeConversationMovie(["Victory scene"]), [])
+
+                const result = runner.processInput("S")
+
+                expect(result.shouldQuit).toBe(true)
+                expect(result.text).toContain("Mission Complete!")
+            })
+        })
+    })
+
     describe("phase announcements", () => {
         describe("getWelcomeText", () => {
             it("contains the turn start announcement for the initial turn", () => {
@@ -175,3 +309,24 @@ describe("TextMissionRunner", () => {
         })
     })
 })
+
+// Registers a PLAY_MOVIE objective tied to defeating all enemies and returns the configured engine and runner.
+const makeRunnerWithVictoryMovieObjective = (
+    dialogLine: string
+): { runner: TextMissionRunner; engine: MissionEngineTestHarness } => {
+    const movie = makeConversationMovie([dialogLine])
+    const engine = new MissionEngineTestHarness()
+    engine.registerMovie(movie)
+    engine.addObjective(
+        MissionObjectiveService.new({
+            id: "play-victory-movie",
+            rewards: [MissionObjectiveRewardService.newPlayMovieReward("test-movie")],
+            criteria: [
+                MissionObjectiveCriteriaService.newSquaddiesDefeatedCriteria({
+                    affiliations: [SquaddieAffiliation.ENEMY],
+                }),
+            ],
+        })
+    )
+    return { runner: new TextMissionRunner(engine), engine }
+}

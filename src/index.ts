@@ -14,6 +14,7 @@ import {
     MISSIONS_SUBFOLDER,
     listAvailableMissions,
     loadMissionFromFolder,
+    loadMoviesFromFolder,
 } from "./campaignLoader.js"
 import { initLogger, appendLog } from "./logger.js"
 
@@ -110,7 +111,7 @@ async function selectAndLoadMission(rl: readline.Interface): Promise<MissionEngi
 
     const missionNames = listAvailableMissions(missionsPath)
     if (missionNames.length === 0) {
-        console.warn("[index] Warning: No missions found in campaignData/campaigns/main/missions. Loading default test harness mission.")
+        console.warn("[index] Warning: No missions found in campaignData/campaigns/test/missions. Loading default test harness mission.")
         return loadTestHarnessMission(rl)
     }
 
@@ -125,6 +126,7 @@ async function selectAndLoadMission(rl: readline.Interface): Promise<MissionEngi
         rl.close()
         process.exit(1)
     }
+    loadMoviesFromFolder(engine, campaignFolderPath)
 
     return engine
 }

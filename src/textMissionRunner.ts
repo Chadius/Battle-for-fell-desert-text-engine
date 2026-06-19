@@ -1,6 +1,11 @@
 import type { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
 import type { SerializedSquaddieActionResult } from "../logic/src/squaddieAction/calculate/result/squaddieActionResult.js"
 import {
+    MovieEngineCommand,
+    type TMovieEngineCommand,
+} from "../logic/src/mission/missionEngine/missionEngine.js"
+import { sceneDisplayText } from "./movieSceneInspector.js"
+import {
     processCommand,
     InteractionPhase,
 } from "./commandProcessor.js"
@@ -15,7 +20,7 @@ import {
 import type { TSquaddieAffiliation } from "../logic/src/affiliation/affiliation.js"
 import { renderMap, type MapRenderInfo } from "./mapRenderer.js"
 import { EnemyAI } from "./enemyAI.js"
-import {MissionObjectiveRewardType, TMissionObjectiveRewardType} from "../logic/src/mission/missionObjectiveReward.js"
+import { MissionObjectiveRewardType } from "../logic/src/mission/missionObjectiveReward.js"
 import type { MissionObjective } from "../logic/src/mission/missionObjective.js"
 
 const MAX_PHASE_TRANSITIONS = 20
@@ -102,7 +107,46 @@ export class TextMissionRunner {
         return renderMap(overview, renderInfo)
     }
 
+    // Maps raw player input to a MovieEngineCommand, or "quit", or undefined (unrecognised).
+    private movieCommandFromInput(
+        input: string
+    ): TMovieEngineCommand | "quit" | undefined {
+        const normalized = input.trim().toUpperCase()
+        if (normalized === "Q") return "quit"
+        if (normalized === "" || normalized === "N") return MovieEngineCommand.CONFIRM
+        if (normalized === "X") return MovieEngineCommand.COMPLETE_SCENE
+        if (normalized === "F") return MovieEngineCommand.FAST_FORWARD
+        if (normalized === "S") return MovieEngineCommand.STOP
+        return undefined
+    }
+
+    private currentSceneText(): string {
+        const status = this.engine.getMovieStatus()
+        if (status == undefined || status.currentScene == undefined) return ""
+        return sceneDisplayText(status.currentScene)
+    }
+
+    // Handles all input while a movie is playing. Returns to normal gameplay once the movie ends.
+    private processMovieInput(input: string): ProcessInputResult {
+        const command = this.movieCommandFromInput(input)
+        if (command === "quit") return { text: "", shouldQuit: true }
+
+        if (command != undefined) {
+            this.engine.processMovieCommand(command)
+        }
+
+        if (this.engine.isMoviePlaying()) {
+            return { text: this.currentSceneText(), shouldQuit: false }
+        }
+
+        return this.missionEndResult() ?? { text: "", shouldQuit: false }
+    }
+
     processInput(input: string): ProcessInputResult {
+        if (this.engine.isMoviePlaying()) {
+            return this.processMovieInput(input)
+        }
+
         const result = processCommand(input, this.engine, this.context)
 
         if (result.updatedContext != undefined) {
@@ -126,15 +170,35 @@ export class TextMissionRunner {
             return { text: allText, shouldQuit: true }
         }
 
+        // A movie may have started during action resolution (e.g. victory cutscene).
+        // Show its first frame before handling isDone so the player sees it.
+        if (this.engine.isMoviePlaying()) {
+            const movieText = this.currentSceneText()
+            return {
+                text: [allText, movieText].filter((s) => s.length > 0).join("\n"),
+                shouldQuit: false,
+            }
+        }
+
+        return this.missionEndResult(allText) ?? { text: allText, shouldQuit: false }
+    }
+
+    private giveNonTerminalObjectiveRewards(): void {
+        for (const objective of this.engine.getCompletedNonTerminalButNotRewardedObjectives()) {
+            this.engine.markMissionObjectiveAsRewarded(objective.id)
+        }
+    }
+
+    // Returns a quit result if the mission has ended, or undefined if the game continues.
+    private missionEndResult(prependText = ""): ProcessInputResult | undefined {
         if (this.engine.isDone()) {
             const rewarded = this.engine.getCompletedAndRewardedMissionObjectives()
             const summaryText = this.formatMissionSummary(rewarded)
             return {
-                text: [allText, summaryText].filter((s) => s.length > 0).join("\n"),
+                text: [prependText, summaryText].filter((s) => s.length > 0).join("\n"),
                 shouldQuit: true,
             }
         }
-
         const terminalObjectives = this.getPendingTerminalObjectives()
         if (terminalObjectives.length > 0) {
             const summaryText = this.formatMissionSummary(terminalObjectives)
@@ -142,38 +206,15 @@ export class TextMissionRunner {
                 this.engine.markMissionObjectiveAsRewarded(objective.id)
             }
             return {
-                text: [allText, summaryText].filter((s) => s.length > 0).join("\n"),
+                text: [prependText, summaryText].filter((s) => s.length > 0).join("\n"),
                 shouldQuit: true,
             }
         }
-
-        return { text: allText, shouldQuit: false }
-    }
-
-    private giveNonTerminalObjectiveRewards(): void {
-        const terminalTypes: Set<TMissionObjectiveRewardType> = new Set([
-            MissionObjectiveRewardType.MISSION_ENDS,
-            MissionObjectiveRewardType.MISSION_FAILURE,
-        ])
-        const completed = this.engine.getCompletedButNotRewardedMissionObjectives()
-        for (const objective of completed) {
-            const isTerminal = objective.rewards.some((r) =>
-                terminalTypes.has(r.type)
-            )
-            if (!isTerminal) {
-                this.engine.markMissionObjectiveAsRewarded(objective.id)
-            }
-        }
+        return undefined
     }
 
     private getPendingTerminalObjectives(): MissionObjective[] {
-        const terminalTypes: Set<TMissionObjectiveRewardType> = new Set([
-            MissionObjectiveRewardType.MISSION_ENDS,
-            MissionObjectiveRewardType.MISSION_FAILURE,
-        ])
-        return this.engine
-            .getCompletedButNotRewardedMissionObjectives()
-            .filter((obj) => obj.rewards.some((r) => terminalTypes.has(r.type)))
+        return this.engine.getCompletedTerminalButNotRewardedObjectives()
     }
 
     private formatMissionSummary(terminalObjectives: MissionObjective[]): string {

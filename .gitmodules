@@ -1,3 +1,6 @@
 [submodule "logic"]
 	path = logic
 	url = https://github.com/Chadius/Battle-for-fell-desert-logic.git
+[submodule "campaignData/campaigns"]
+	path = campaignData/campaigns
+	url = /Users/chadserrant/pCloud Drive/My Games/BattleOfFellDesert/campaigns

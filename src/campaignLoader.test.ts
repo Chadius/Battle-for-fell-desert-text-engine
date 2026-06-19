@@ -3,8 +3,8 @@ import { join } from "node:path"
 import { listAvailableMissions, loadMissionFromFolder } from "./campaignLoader.js"
 import { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
 
-// campaignData/campaigns/main lives at the project root (one level above src/).
-const campaignFolderPath = join(process.cwd(), "campaignData", "campaigns", "main")
+// campaignData/campaigns/test lives at the project root (one level above src/).
+const campaignFolderPath = join(process.cwd(), "campaignData", "campaigns", "test")
 const campaignMissionsPath = join(campaignFolderPath, "missions")
 
 describe("campaignLoader", () => {

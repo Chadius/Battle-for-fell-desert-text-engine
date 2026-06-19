@@ -12,7 +12,5 @@ dist/
 *.ts.map
 *.d.ts
 *.d.ts.map
-/logic/tsconfig.tsbuildinfo
-/logic/**.ts.map
-/logic/**.d.ts.map
+/logic/
 /.claude/
