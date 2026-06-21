@@ -34,6 +34,37 @@ const makeImageMovie = (): Movie => ({
     ],
 })
 
+// Single CONVERSATION scene with a DECISION line; options use numeric string IDs.
+const makeDecisionMovie = (): Movie => ({
+    id: "test-decision-movie",
+    firstSceneId: "decision-scene",
+    scenes: [
+        {
+            type: MovieSceneType.CONVERSATION,
+            data: {
+                id: "decision-scene",
+                nextSceneId: undefined,
+                lines: [
+                    {
+                        type: "DECISION" as const,
+                        prompt: { "en-us": { text: "What do you choose?" } },
+                        options: [
+                            {
+                                decisionId: "1",
+                                text: { "en-us": { text: "Option A" } },
+                            },
+                            {
+                                decisionId: "2",
+                                text: { "en-us": { text: "Option B" } },
+                            },
+                        ],
+                    },
+                ],
+            },
+        },
+    ],
+})
+
 // Single CONVERSATION scene with the given dialog lines (en-us text strings).
 const makeConversationMovie = (lines: string[]): Movie => ({
     id: "test-movie",
@@ -277,6 +308,43 @@ describe("TextMissionRunner", () => {
 
                 expect(result.shouldQuit).toBe(true)
                 expect(result.text).toContain("Mission Complete!")
+            })
+
+            describe("decision scenes", () => {
+                it("shows the choice list and a hint footer when an unrecognised option is entered", () => {
+                    const engine = new MissionEngineTestHarness()
+                    const runner = new TextMissionRunner(engine)
+                    engine.playMovie(makeDecisionMovie(), [])
+
+                    const result = runner.processInput("99")
+
+                    expect(result.text).toContain('"99"')
+                    expect(result.text).toContain("1) Option A")
+                    expect(result.text).toContain("2) Option B")
+                    expect(result.text).toContain("[Type the option number to choose, S to stop]")
+                })
+
+                it("ends the movie when a valid decision ID is entered", () => {
+                    const engine = new MissionEngineTestHarness()
+                    const runner = new TextMissionRunner(engine)
+                    engine.playMovie(makeDecisionMovie(), [])
+
+                    runner.processInput("1")
+
+                    expect(engine.isMoviePlaying()).toBe(false)
+                })
+
+                it("keeps the movie playing and shows choices without an error when S is sent during a decision scene", () => {
+                    const engine = new MissionEngineTestHarness()
+                    const runner = new TextMissionRunner(engine)
+                    engine.playMovie(makeDecisionMovie(), [])
+
+                    const result = runner.processInput("S")
+
+                    expect(engine.isMoviePlaying()).toBe(true)
+                    expect(result.text).toContain("1) Option A")
+                    expect(result.text).not.toContain("is not a valid choice")
+                })
             })
         })
     })

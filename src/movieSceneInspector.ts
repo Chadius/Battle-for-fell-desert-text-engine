@@ -14,9 +14,10 @@ export const sceneDisplayText = (scene: CurrentScene): string => {
         lines.push(`${speaker}${scene.text}`)
         if (scene.isWaitingForDecision) {
             lines.push("Choose:")
-            for (const d of scene.decisions) {
-                lines.push(`  ${d.decisionId}) ${d.text}`)
-            }
+            scene.decisions.forEach((d, i) => {
+                lines.push(`  ${i + 1}) ${d.text}`)
+            })
+            lines.push("[Type the option number to choose, S to stop]")
             return lines.join("\n")
         }
     } else if (scene.type === MovieSceneType.IMAGE) {

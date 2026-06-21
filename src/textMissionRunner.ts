@@ -2,6 +2,7 @@ import type { MissionEngine } from "../logic/src/mission/missionEngine/missionEn
 import type { SerializedSquaddieActionResult } from "../logic/src/squaddieAction/calculate/result/squaddieActionResult.js"
 import {
     MovieEngineCommand,
+    MovieSceneType,
     type TMovieEngineCommand,
 } from "../logic/src/mission/missionEngine/missionEngine.js"
 import { sceneDisplayText } from "./movieSceneInspector.js"
@@ -131,9 +132,52 @@ export class TextMissionRunner {
         const command = this.movieCommandFromInput(input)
         if (command === "quit") return { text: "", shouldQuit: true }
 
+        // Decision scenes are blocking — recognized movie commands are silently re-displayed
+        const currentScene = this.engine.getMovieStatus()?.currentScene
+        if (
+            currentScene?.type === MovieSceneType.CONVERSATION &&
+            currentScene.isWaitingForDecision
+        ) {
+            if (command != undefined) {
+                return { text: this.currentSceneText(), shouldQuit: false }
+            }
+            return this.movieDecisionResult(input.trim())
+        }
+
+        if (command === MovieEngineCommand.STOP) {
+            this.engine.processMovieCommand(MovieEngineCommand.STOP)
+            return this.missionEndResult() ?? { text: "", shouldQuit: false }
+        }
+
         if (command != undefined) {
             this.engine.processMovieCommand(command)
         }
+
+        if (this.engine.isMoviePlaying()) {
+            return { text: this.currentSceneText(), shouldQuit: false }
+        }
+
+        return this.missionEndResult() ?? { text: "", shouldQuit: false }
+    }
+
+    // Maps a 1-based numeric string to the decision at that position, then submits it.
+    private movieDecisionResult(input: string): ProcessInputResult {
+        const currentScene = this.engine.getMovieStatus()?.currentScene
+        const decisions =
+            currentScene?.type === MovieSceneType.CONVERSATION
+                ? currentScene.decisions
+                : []
+
+        const choiceNumber = parseInt(input, 10)
+        const decision = decisions[choiceNumber - 1]
+        if (decision == undefined) {
+            return {
+                text: `"${input}" is not a valid choice.\n${this.currentSceneText()}`,
+                shouldQuit: false,
+            }
+        }
+
+        this.engine.selectMovieDecision(decision.decisionId)
 
         if (this.engine.isMoviePlaying()) {
             return { text: this.currentSceneText(), shouldQuit: false }
