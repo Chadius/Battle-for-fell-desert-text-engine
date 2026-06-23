@@ -5,7 +5,7 @@ import {
     MovieSceneType,
     type TMovieEngineCommand,
 } from "../logic/src/mission/missionEngine/missionEngine.js"
-import { sceneDisplayText } from "./movieSceneInspector.js"
+import { findDecisionId, sceneDisplayText, sceneIsWaitingForDecision } from "./movieSceneInspector.js"
 import {
     processCommand,
     InteractionPhase,
@@ -134,10 +134,7 @@ export class TextMissionRunner {
 
         // Decision scenes are blocking — recognized movie commands are silently re-displayed
         const currentScene = this.engine.getMovieStatus()?.currentScene
-        if (
-            currentScene?.type === MovieSceneType.CONVERSATION &&
-            currentScene.isWaitingForDecision
-        ) {
+        if (currentScene != undefined && sceneIsWaitingForDecision(currentScene)) {
             if (command != undefined) {
                 return { text: this.currentSceneText(), shouldQuit: false }
             }
@@ -160,24 +157,20 @@ export class TextMissionRunner {
         return this.missionEndResult() ?? { text: "", shouldQuit: false }
     }
 
-    // Maps a 1-based numeric string to the decision at that position, then submits it.
+    // Resolves the player's input to a decision by matching decisionId, then submits it.
     private movieDecisionResult(input: string): ProcessInputResult {
         const currentScene = this.engine.getMovieStatus()?.currentScene
-        const decisions =
-            currentScene?.type === MovieSceneType.CONVERSATION
-                ? currentScene.decisions
-                : []
+        const decisionId =
+            currentScene != undefined ? findDecisionId(currentScene, input) : undefined
 
-        const choiceNumber = parseInt(input, 10)
-        const decision = decisions[choiceNumber - 1]
-        if (decision == undefined) {
+        if (decisionId == undefined) {
             return {
                 text: `"${input}" is not a valid choice.\n${this.currentSceneText()}`,
                 shouldQuit: false,
             }
         }
 
-        this.engine.selectMovieDecision(decision.decisionId)
+        this.engine.selectMovieDecision(decisionId)
 
         if (this.engine.isMoviePlaying()) {
             return { text: this.currentSceneText(), shouldQuit: false }

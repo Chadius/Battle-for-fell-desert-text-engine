@@ -5,6 +5,21 @@ type CurrentScene = NonNullable<
     NonNullable<ReturnType<MissionEngine["getMovieStatus"]>>["currentScene"]
 >
 
+// Returns true when the scene is a conversation that is currently blocking on a player decision.
+export const sceneIsWaitingForDecision = (scene: CurrentScene): boolean =>
+    scene.type === MovieSceneType.CONVERSATION && scene.isWaitingForDecision
+
+// Returns the decisionId matching the player's input, or undefined if the input is not a valid choice.
+export const findDecisionId = (
+    scene: CurrentScene,
+    input: string
+): string | undefined => {
+    if (scene.type !== MovieSceneType.CONVERSATION || !scene.isWaitingForDecision) {
+        return undefined
+    }
+    return scene.decisions.find((d) => d.decisionId === input)?.decisionId
+}
+
 // Formats a single movie scene as player-facing display text.
 export const sceneDisplayText = (scene: CurrentScene): string => {
     const lines: string[] = []
@@ -12,19 +27,21 @@ export const sceneDisplayText = (scene: CurrentScene): string => {
     if (scene.type === MovieSceneType.CONVERSATION) {
         const speaker = scene.speakerId != undefined ? `${scene.speakerId}: ` : ""
         lines.push(`${speaker}${scene.text}`)
-        if (scene.isWaitingForDecision) {
-            lines.push("Choose:")
-            scene.decisions.forEach((d, i) => {
-                lines.push(`  ${i + 1}) ${d.text}`)
-            })
-            lines.push("[Type the option number to choose, S to stop]")
-            return lines.join("\n")
-        }
     } else if (scene.type === MovieSceneType.IMAGE) {
-        if (scene.description != undefined) lines.push(scene.description)
+        const descriptionText = scene.description ?? "No description given"
+        lines.push(`[Image] ${descriptionText}`)
         if (scene.caption != undefined) lines.push(scene.caption)
     }
 
-    lines.push("[Enter/N to continue, S to stop movie]")
+    if (scene.type === MovieSceneType.CONVERSATION && scene.isWaitingForDecision) {
+        lines.push("Choose:")
+        for (const d of scene.decisions) {
+            lines.push(`  ${d.decisionId}) ${d.text}`)
+        }
+        lines.push("[Type the option number to choose, S to stop]")
+    } else {
+        lines.push("[Enter/N to continue, S to stop movie]")
+    }
+
     return lines.join("\n")
 }

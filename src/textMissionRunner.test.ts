@@ -17,19 +17,17 @@ import { MissionObjectiveService } from "../logic/src/mission/missionObjective.j
 import { MissionObjectiveRewardService } from "../logic/src/mission/missionObjectiveReward.js"
 import { MissionObjectiveCriteriaService } from "../logic/src/mission/missionObjectiveCriteria.js"
 import { SquaddieAffiliation } from "../logic/src/affiliation/affiliation.js"
+import { ResourceManifestEntryService } from "../logic/src/resource/resourceManifest.js"
+import { ResourceManifestCollectionService } from "../logic/src/resource/resourceManifestCollection.js"
 
-// Minimal single-IMAGE-scene movie. No caption or description, so
-// currentSceneText() returns only the "[Enter/N to continue, S to stop movie]" prompt.
-const makeImageMovie = (): Movie => ({
-    id: "test-movie",
+// Single IMAGE-scene movie. Optional caption and resourceManifestEntryId control what the scene displays.
+const makeImageMovie = (opts: { caption?: string; resourceManifestEntryId?: string } = {}): Movie => ({
+    id: "test-image-movie",
     firstSceneId: "scene-1",
     scenes: [
         {
             type: MovieSceneType.IMAGE,
-            data: MovieSceneImageService.new({
-                id: "scene-1",
-                resourceManifestEntryId: "placeholder",
-            }),
+            data: MovieSceneImageService.new({ id: "scene-1", ...opts }),
         },
     ],
 })
@@ -249,6 +247,46 @@ describe("TextMissionRunner", () => {
                 expect(result.text).toContain("[Enter/N to continue, S to stop movie]")
             })
 
+            describe("when the movie scene is an image", () => {
+                it("shows '[Image] No description given' and the caption when no resource entry is present", () => {
+                    const engine = new MissionEngineTestHarness()
+                    const runner = new TextMissionRunner(engine)
+                    engine.playMovie(makeImageMovie({ caption: "Move your squaddie forward." }), [])
+
+                    const result = runner.processInput("M")
+
+                    expect(result.text).toContain("[Image] No description given")
+                    expect(result.text).toContain("Move your squaddie forward.")
+                })
+
+                it("shows '[Image]' followed by the description from the resource manifest", () => {
+                    const engine = new MissionEngineTestHarness()
+                    const runner = new TextMissionRunner(engine)
+                    engine.playMovie(
+                        makeImageMovie({ resourceManifestEntryId: BATTLE_OVERVIEW_RESOURCE_ID }),
+                        makeImageResourceCollection()
+                    )
+
+                    const result = runner.processInput("M")
+
+                    expect(result.text).toContain("[Image] A wide view of the fell desert battlefield")
+                })
+
+                it("shows both the description label and the caption when both are provided", () => {
+                    const engine = new MissionEngineTestHarness()
+                    const runner = new TextMissionRunner(engine)
+                    engine.playMovie(
+                        makeImageMovie({ resourceManifestEntryId: BATTLE_OVERVIEW_RESOURCE_ID, caption: "The desert stretches endlessly." }),
+                        makeImageResourceCollection()
+                    )
+
+                    const result = runner.processInput("M")
+
+                    expect(result.text).toContain("[Image] A wide view of the fell desert battlefield")
+                    expect(result.text).toContain("The desert stretches endlessly.")
+                })
+            })
+
             it("advances to the next dialog line when Enter is sent", () => {
                 const engine = new MissionEngineTestHarness()
                 const runner = new TextMissionRunner(engine)
@@ -377,6 +415,30 @@ describe("TextMissionRunner", () => {
         })
     })
 })
+
+// Resource ID shared between makeImageMovie call sites and makeImageResourceCollection.
+const BATTLE_OVERVIEW_RESOURCE_ID = "battle-overview"
+
+// Resource collection containing one image entry with an en-us description.
+const makeImageResourceCollection = () => {
+    const entry = ResourceManifestEntryService.new({
+        id: BATTLE_OVERVIEW_RESOURCE_ID,
+        label: "Battle Overview",
+        description: {
+            "en-us": { text: "A wide view of the fell desert battlefield" },
+        },
+        filepath: "./battle-overview.png",
+        format: "PNG",
+        type: "IMAGE",
+    })
+    return [
+        ResourceManifestCollectionService.add(
+            ResourceManifestCollectionService.new(),
+            BATTLE_OVERVIEW_RESOURCE_ID,
+            entry
+        ),
+    ]
+}
 
 // Registers a PLAY_MOVIE objective tied to defeating all enemies and returns the configured engine and runner.
 const makeRunnerWithVictoryMovieObjective = (
