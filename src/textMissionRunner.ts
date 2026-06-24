@@ -2,10 +2,9 @@ import type { MissionEngine } from "../logic/src/mission/missionEngine/missionEn
 import type { SerializedSquaddieActionResult } from "../logic/src/squaddieAction/calculate/result/squaddieActionResult.js"
 import {
     MovieEngineCommand,
-    MovieSceneType,
     type TMovieEngineCommand,
 } from "../logic/src/mission/missionEngine/missionEngine.js"
-import { findDecisionId, sceneDisplayText, sceneIsWaitingForDecision } from "./movieSceneInspector.js"
+import { sceneDisplayText, sceneIsWaitingForDecision, type CurrentScene } from "./movieSceneInspector.js"
 import {
     processCommand,
     InteractionPhase,
@@ -138,12 +137,12 @@ export class TextMissionRunner {
             if (command != undefined) {
                 return { text: this.currentSceneText(), shouldQuit: false }
             }
-            return this.movieDecisionResult(input.trim())
+            return this.movieDecisionResult(currentScene, input.trim())
         }
 
         if (command === MovieEngineCommand.STOP) {
             this.engine.processMovieCommand(MovieEngineCommand.STOP)
-            return this.missionEndResult() ?? { text: "", shouldQuit: false }
+            return this.missionEndResultOrContinue()
         }
 
         if (command != undefined) {
@@ -154,14 +153,22 @@ export class TextMissionRunner {
             return { text: this.currentSceneText(), shouldQuit: false }
         }
 
-        return this.missionEndResult() ?? { text: "", shouldQuit: false }
+        return this.missionEndResultOrContinue()
+    }
+
+    // Maps a 1-based position string to the decisionId at that index, or undefined if out of range.
+    private resolveDecisionId(scene: CurrentScene, input: string): string | undefined {
+        if (!sceneIsWaitingForDecision(scene)) return undefined
+        const choiceNumber = parseInt(input, 10)
+        if (isNaN(choiceNumber) || choiceNumber < 1 || choiceNumber > scene.decisions.length) {
+            return undefined
+        }
+        return scene.decisions[choiceNumber - 1]?.decisionId
     }
 
     // Resolves the player's input to a decision by matching decisionId, then submits it.
-    private movieDecisionResult(input: string): ProcessInputResult {
-        const currentScene = this.engine.getMovieStatus()?.currentScene
-        const decisionId =
-            currentScene != undefined ? findDecisionId(currentScene, input) : undefined
+    private movieDecisionResult(currentScene: CurrentScene, input: string): ProcessInputResult {
+        const decisionId = this.resolveDecisionId(currentScene, input)
 
         if (decisionId == undefined) {
             return {
@@ -176,7 +183,11 @@ export class TextMissionRunner {
             return { text: this.currentSceneText(), shouldQuit: false }
         }
 
-        return this.missionEndResult() ?? { text: "", shouldQuit: false }
+        return this.missionEndResultOrContinue()
+    }
+
+    private missionEndResultOrContinue(prependText = ""): ProcessInputResult {
+        return this.missionEndResult(prependText) ?? { text: prependText, shouldQuit: false }
     }
 
     processInput(input: string): ProcessInputResult {
@@ -217,7 +228,7 @@ export class TextMissionRunner {
             }
         }
 
-        return this.missionEndResult(allText) ?? { text: allText, shouldQuit: false }
+        return this.missionEndResultOrContinue(allText)
     }
 
     private giveNonTerminalObjectiveRewards(): void {

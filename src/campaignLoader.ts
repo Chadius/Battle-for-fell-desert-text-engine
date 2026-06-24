@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, existsSync } from "node:fs"
 import { join } from "node:path"
-import type { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
+import type { Movie } from "../logic/src/movie/movie.js"
 import { MovieCollectionLoader } from "./movieCollectionLoader.js"
 
 export const CAMPAIGN_DATA_FOLDER = "campaignData"
@@ -49,15 +49,11 @@ export const loadMissionFromFolder = (
     return engine.finalizeLoadingMission()
 }
 
-// Reads movies.json from campaignFolderPath and registers each movie with the engine.
-// Returns silently if movies.json does not exist.
-export const loadMoviesFromFolder = (
-    engine: MissionEngine,
-    campaignFolderPath: string
-): void => {
+// Reads movies.json from campaignFolderPath and returns the parsed movies.
+// Returns an empty array if movies.json does not exist.
+export const loadMoviesFromFolder = (campaignFolderPath: string): Movie[] => {
     const moviesPath = join(campaignFolderPath, "movies.json")
-    if (!existsSync(moviesPath)) return
+    if (!existsSync(moviesPath)) return []
     const json = JSON.parse(readFileSync(moviesPath, "utf-8"))
-    const movies = MovieCollectionLoader.loadFromJSON(json)
-    movies.forEach((movie) => engine.registerMovie(movie))
+    return MovieCollectionLoader.loadFromJSON(json)
 }

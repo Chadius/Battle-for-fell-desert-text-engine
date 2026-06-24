@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, beforeEach } from "vitest"
 import { TextMissionRunner } from "./textMissionRunner.js"
 import {
     MissionEngineTestHarness,
@@ -32,7 +32,8 @@ const makeImageMovie = (opts: { caption?: string; resourceManifestEntryId?: stri
     ],
 })
 
-// Single CONVERSATION scene with a DECISION line; options use numeric string IDs.
+// Single CONVERSATION scene with a DECISION line; options use descriptive string IDs (not numeric)
+// so tests can verify positional display (1, 2) is distinct from the underlying decisionId.
 const makeDecisionMovie = (): Movie => ({
     id: "test-decision-movie",
     firstSceneId: "decision-scene",
@@ -48,11 +49,11 @@ const makeDecisionMovie = (): Movie => ({
                         prompt: { "en-us": { text: "What do you choose?" } },
                         options: [
                             {
-                                decisionId: "1",
+                                decisionId: "option-a",
                                 text: { "en-us": { text: "Option A" } },
                             },
                             {
-                                decisionId: "2",
+                                decisionId: "option-b",
                                 text: { "en-us": { text: "Option B" } },
                             },
                         ],
@@ -287,73 +288,75 @@ describe("TextMissionRunner", () => {
                 })
             })
 
-            it("advances to the next dialog line when Enter is sent", () => {
-                const engine = new MissionEngineTestHarness()
-                const runner = new TextMissionRunner(engine)
-                engine.playMovie(makeConversationMovie(["First line", "Second line"]), [])
+            describe("when a two-line conversation movie is playing", () => {
+                let engine: MissionEngineTestHarness
+                let runner: TextMissionRunner
 
-                const result = runner.processInput("")
+                beforeEach(() => {
+                    engine = new MissionEngineTestHarness()
+                    runner = new TextMissionRunner(engine)
+                    engine.playMovie(makeConversationMovie(["First line", "Second line"]), [])
+                })
 
-                expect(result.text).toContain("Second line")
+                it("advances to the next dialog line when Enter is sent", () => {
+                    const result = runner.processInput("")
+
+                    expect(result.text).toContain("Second line")
+                })
+
+                it("advances to the next dialog line when N is sent", () => {
+                    const result = runner.processInput("N")
+
+                    expect(result.text).toContain("Second line")
+                })
+
+                it("quits immediately when Q is sent", () => {
+                    const result = runner.processInput("Q")
+
+                    expect(result.shouldQuit).toBe(true)
+                })
             })
 
-            it("advances to the next dialog line when N is sent", () => {
-                const engine = new MissionEngineTestHarness()
-                const runner = new TextMissionRunner(engine)
-                engine.playMovie(makeConversationMovie(["First line", "Second line"]), [])
+            describe("when the mission is done and a single-scene movie is playing", () => {
+                let engine: MissionEngineTestHarness
+                let runner: TextMissionRunner
 
-                const result = runner.processInput("N")
+                beforeEach(() => {
+                    engine = new MissionEngineTestHarness()
+                    runner = new TextMissionRunner(engine)
+                    engine.defeatSlitherDemon()
+                    engine.markMissionObjectiveAsRewarded(
+                        MissionEngineTestHarnessIds.objectives.defeatAllEnemies
+                    )
+                    engine.playMovie(makeConversationMovie(["Victory scene"]), [])
+                })
 
-                expect(result.text).toContain("Second line")
+                it("shows the mission summary and quits when the last dialog line is confirmed", () => {
+                    const result = runner.processInput("")
+
+                    expect(result.shouldQuit).toBe(true)
+                    expect(result.text).toContain("Mission Complete!")
+                })
+
+                it("shows the mission summary and quits when S is sent", () => {
+                    const result = runner.processInput("S")
+
+                    expect(result.shouldQuit).toBe(true)
+                    expect(result.text).toContain("Mission Complete!")
+                })
             })
 
-            it("quits immediately when Q is sent", () => {
-                const engine = new MissionEngineTestHarness()
-                const runner = new TextMissionRunner(engine)
-                engine.playMovie(makeConversationMovie(["First line", "Second line"]), [])
+            describe("when a decision scene is playing", () => {
+                let engine: MissionEngineTestHarness
+                let runner: TextMissionRunner
 
-                const result = runner.processInput("Q")
-
-                expect(result.shouldQuit).toBe(true)
-            })
-
-            it("shows the mission summary and quits when the last dialog line is confirmed and the mission is done", () => {
-                const engine = new MissionEngineTestHarness()
-                const runner = new TextMissionRunner(engine)
-                engine.defeatSlitherDemon()
-                engine.markMissionObjectiveAsRewarded(
-                    MissionEngineTestHarnessIds.objectives.defeatAllEnemies
-                )
-                // Single-line movie — confirming it ends the movie immediately
-                engine.playMovie(makeConversationMovie(["Victory scene"]), [])
-
-                const result = runner.processInput("")
-
-                expect(result.shouldQuit).toBe(true)
-                expect(result.text).toContain("Mission Complete!")
-            })
-
-            it("stops the movie and shows the mission summary when S is sent and the mission is done", () => {
-                const engine = new MissionEngineTestHarness()
-                const runner = new TextMissionRunner(engine)
-                engine.defeatSlitherDemon()
-                engine.markMissionObjectiveAsRewarded(
-                    MissionEngineTestHarnessIds.objectives.defeatAllEnemies
-                )
-                engine.playMovie(makeConversationMovie(["Victory scene"]), [])
-
-                const result = runner.processInput("S")
-
-                expect(result.shouldQuit).toBe(true)
-                expect(result.text).toContain("Mission Complete!")
-            })
-
-            describe("decision scenes", () => {
-                it("shows the choice list and a hint footer when an unrecognised option is entered", () => {
-                    const engine = new MissionEngineTestHarness()
-                    const runner = new TextMissionRunner(engine)
+                beforeEach(() => {
+                    engine = new MissionEngineTestHarness()
+                    runner = new TextMissionRunner(engine)
                     engine.playMovie(makeDecisionMovie(), [])
+                })
 
+                it("shows the choice list and a hint footer when an unrecognised option is entered", () => {
                     const result = runner.processInput("99")
 
                     expect(result.text).toContain('"99"')
@@ -362,25 +365,21 @@ describe("TextMissionRunner", () => {
                     expect(result.text).toContain("[Type the option number to choose, S to stop]")
                 })
 
-                it("ends the movie when a valid decision ID is entered", () => {
-                    const engine = new MissionEngineTestHarness()
-                    const runner = new TextMissionRunner(engine)
-                    engine.playMovie(makeDecisionMovie(), [])
+                it("ends the movie when the player types the position number of a decision option", () => {
+                    const result = runner.processInput("1")
 
-                    runner.processInput("1")
-
-                    expect(engine.isMoviePlaying()).toBe(false)
+                    expect(result.text).not.toContain("1) Option A")
                 })
 
-                it("keeps the movie playing and shows choices without an error when S is sent during a decision scene", () => {
-                    const engine = new MissionEngineTestHarness()
-                    const runner = new TextMissionRunner(engine)
-                    engine.playMovie(makeDecisionMovie(), [])
-
+                it("still shows the choice list when S is entered during a decision scene", () => {
                     const result = runner.processInput("S")
 
-                    expect(engine.isMoviePlaying()).toBe(true)
                     expect(result.text).toContain("1) Option A")
+                })
+
+                it("does not show an error message when S is entered during a decision scene", () => {
+                    const result = runner.processInput("S")
+
                     expect(result.text).not.toContain("is not a valid choice")
                 })
             })

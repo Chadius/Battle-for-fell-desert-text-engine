@@ -126,7 +126,7 @@ async function selectAndLoadMission(rl: readline.Interface): Promise<MissionEngi
         rl.close()
         process.exit(1)
     }
-    loadMoviesFromFolder(engine, campaignFolderPath)
+    loadMoviesFromFolder(campaignFolderPath).forEach((movie) => engine.registerMovie(movie))
 
     return engine
 }
