@@ -1,7 +1,5 @@
-import type {
-    ActionPointCost,
-    SquaddieAction,
-} from "../logic/src/squaddieAction/squaddieAction.js"
+import { type ActionPointCost } from "../logic/src/squaddieAction/squaddieAction.js"
+import { combatActionIndex, DEFAULT_END_TURN_ACTION_ID, DEFAULT_MOVE_ACTION_ID } from "./actionKeyIndex.js"
 import type { SquaddieActionValidity } from "../logic/src/squaddieAction/calculate/validity/squaddieActionValidationService.js"
 import type {
     ActionModifierBreakdown,
@@ -10,37 +8,41 @@ import type {
 import type { TDegreeOfSuccess } from "../logic/src/degreesOfSuccess/degreeOfSuccess.js"
 
 export const SquaddieActionInspector = {
-    formatActionPointCost: (cost: ActionPointCost | undefined) =>
-        formatActionPointCost(cost),
-    formatSquaddieActions: (
+    actionCostSuffix: (
+        cost: ActionPointCost | undefined,
+        cooldownTurns?: number
+    ) => actionCostSuffix(cost, cooldownTurns),
+    squaddieActionsText: (
         validity: SquaddieActionValidity,
-        actionsById: Map<string, SquaddieAction>
-    ) => formatSquaddieActions(validity, actionsById),
-    buildCombatActionIndex: (validity: SquaddieActionValidity): string[] =>
-        buildCombatActionIndex(validity),
-    formatSquaddieActionsWithKeys: (
+    ) => squaddieActionsText(validity),
+    squaddieActionsWithKeysText: (
         validity: SquaddieActionValidity,
-        actionsById: Map<string, SquaddieAction>
-    ) => formatSquaddieActionsWithKeys(validity, actionsById),
-    formatForecast: (
+    ) => squaddieActionsWithKeysText(validity),
+    forecastText: (
         forecasts: SerializedForecastedActionResult[],
         targetName: string
-    ) => formatForecast(forecasts, targetName),
+    ) => forecastText(forecasts, targetName),
 }
 
-const formatActionPointCost = (cost: ActionPointCost | undefined): string => {
-    if (cost == undefined || cost === 0) {
-        return ""
-    }
+const actionCostSuffix = (
+    cost: ActionPointCost | undefined,
+    cooldownTurns?: number
+): string => {
+    const parts: string[] = []
     if (cost === "all") {
-        return " (all AP)"
+        parts.push("all AP")
+    } else if (cost != undefined && cost !== 0) {
+        parts.push(`${cost} AP`)
     }
-    return ` (${cost} AP)`
+    if (cooldownTurns != undefined) {
+        parts.push(`${cooldownTurns}-turn cooldown`)
+    }
+    if (parts.length === 0) return ""
+    return ` (${parts.join(", ")})`
 }
 
-const formatSquaddieActions = (
+const squaddieActionsText = (
     validity: SquaddieActionValidity,
-    actionsById: Map<string, SquaddieAction>
 ): string => {
     const { invalidActions, validActions } = validity
 
@@ -60,40 +62,15 @@ const formatSquaddieActions = (
     if (validActions.length > 0) {
         lines.push("  Valid:")
         for (const action of validActions) {
-            const squaddieAction = actionsById.get(action.actionId)
-            const cost =
-                squaddieAction?.effectOnActor.SUCCESS?.actionPoints?.spent
-            const costSuffix = formatActionPointCost(cost)
-            lines.push(`    ${action.actionName}${costSuffix}`)
+            lines.push(`    ${action.actionName}${actionCostSuffix(action.apCost, action.cooldownTurns)}`)
         }
     }
 
     return lines.join("\n")
 }
 
-const buildCombatActionIndex = (
-    validity: SquaddieActionValidity
-): string[] => {
-    const defaultActionIds = new Set(["default-move", "default-end-turn"])
-    const seen = new Set<string>()
-    const ids: string[] = []
-
-    for (const action of [
-        ...validity.validActions,
-        ...validity.invalidActions,
-    ]) {
-        if (!defaultActionIds.has(action.actionId) && !seen.has(action.actionId)) {
-            seen.add(action.actionId)
-            ids.push(action.actionId)
-        }
-    }
-
-    return ids.sort((a, b) => a.localeCompare(b))
-}
-
-const formatSquaddieActionsWithKeys = (
+const squaddieActionsWithKeysText = (
     validity: SquaddieActionValidity,
-    actionsById: Map<string, SquaddieAction>
 ): string => {
     const { validActions, invalidActions } = validity
 
@@ -102,40 +79,36 @@ const formatSquaddieActionsWithKeys = (
     }
 
     const lines: string[] = ["Actions:"]
-    const combatIndex = buildCombatActionIndex(validity)
+    const combatIndex = combatActionIndex(validity)
     const invalidMap = new Map(invalidActions.map((a) => [a.actionId, a]))
     const validMap = new Map(validActions.map((a) => [a.actionId, a]))
 
     for (let i = 0; i < combatIndex.length; i++) {
         const actionId = combatIndex[i]
         const key = `A${i + 1}`
-        const squaddieAction = actionsById.get(actionId)
-        const cost = squaddieAction?.effectOnActor.SUCCESS?.actionPoints?.spent
-        const costSuffix = formatActionPointCost(cost)
 
         const validAction = validMap.get(actionId)
         const invalidAction = invalidMap.get(actionId)
         const actionName =
             validAction?.actionName ?? invalidAction?.actionName ?? actionId
+        const suffix = actionCostSuffix(
+            (validAction ?? invalidAction)?.apCost,
+            (validAction ?? invalidAction)?.cooldownTurns
+        )
 
         if (invalidAction == undefined) {
-            lines.push(`  ${key} - ${actionName}${costSuffix}`)
+            lines.push(`  ${key} - ${actionName}${suffix}`)
         } else {
-            lines.push(
-                `  ${key} - ${actionName}${costSuffix} [${invalidAction.reason}]`
-            )
+            lines.push(`  ${key} - ${actionName}${suffix} [${invalidAction.reason}]`)
         }
     }
 
-    const endTurnValid = validMap.get("default-end-turn")
+    const endTurnValid = validMap.get(DEFAULT_END_TURN_ACTION_ID)
     if (endTurnValid != undefined) {
-        const squaddieAction = actionsById.get("default-end-turn")
-        const cost = squaddieAction?.effectOnActor.SUCCESS?.actionPoints?.spent
-        const costSuffix = formatActionPointCost(cost)
-        lines.push(`  AE - ${endTurnValid.actionName}${costSuffix}`)
+        lines.push(`  AE - ${endTurnValid.actionName}${actionCostSuffix(endTurnValid.apCost, endTurnValid.cooldownTurns)}`)
     }
 
-    const moveValid = validMap.get("default-move")
+    const moveValid = validMap.get(DEFAULT_MOVE_ACTION_ID)
     if (moveValid != undefined) {
         lines.push(`  AM - ${moveValid.actionName}`)
     }
@@ -198,7 +171,7 @@ const isBreakdownNotable = (breakdown: ActionModifierBreakdown): boolean =>
     (breakdown.actorFrightenedPenalty != undefined && breakdown.actorFrightenedPenalty > 0) ||
     (breakdown.targetFrightenedPenalty != undefined && breakdown.targetFrightenedPenalty > 0)
 
-const formatForecast = (
+const forecastText = (
     forecasts: SerializedForecastedActionResult[],
     targetName: string
 ): string => {

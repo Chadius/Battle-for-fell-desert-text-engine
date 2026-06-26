@@ -3,13 +3,12 @@ import {SquaddieActionInspector,} from "./squaddieActionInspector.js"
 import type {
     SquaddieActionValidity
 } from "../logic/src/squaddieAction/calculate/validity/squaddieActionValidationService.js"
-import type {SquaddieAction} from "../logic/src/squaddieAction/squaddieAction.js"
-import {SquaddieActionService} from "../logic/src/squaddieAction/squaddieAction.js"
 import {DegreeOfSuccess} from "../logic/src/degreesOfSuccess/degreeOfSuccess.js"
 import type {SerializedForecastedActionResult} from "../logic/src/squaddieAction/calculate/result/squaddieActionResultCalculator.js"
 import {RollGenerator} from "../logic/src/squaddieAction/calculate/roll/rollGenerator.js"
 import {MissionAffiliationTurn} from "../logic/src/mission/missionTurn.js"
 import { createSimplePlayerVsEnemyMission, SimpleTestMissionIds } from "./testUtils/simpleTestMission.js"
+import { combatActionIndex } from "./actionKeyIndex.js"
 import {
     SquaddieConditionDecaysAt,
     SquaddieConditionService,
@@ -20,43 +19,52 @@ import {
     CoordinateMovePathMoveType,
     CoordinateMovePathService,
 } from "../logic/src/coordinateMap/path/path.js"
+import type { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
 
 describe("squaddieActionInspector", () => {
-    describe("formatActionPointCost", () => {
+    const emptyBattleSquaddieId = {
+        inBattleSquaddieId: 0,
+        outOfBattleSquaddieId: "test",
+    }
+
+    describe("actionCostSuffix", () => {
         it("returns AP cost suffix for numeric cost", () => {
-            expect(SquaddieActionInspector.formatActionPointCost(1)).toBe(" (1 AP)")
+            expect(SquaddieActionInspector.actionCostSuffix(1)).toBe(" (1 AP)")
         })
 
         it("returns all AP suffix for 'all' cost", () => {
-            expect(SquaddieActionInspector.formatActionPointCost("all")).toBe(" (all AP)")
+            expect(SquaddieActionInspector.actionCostSuffix("all")).toBe(" (all AP)")
         })
 
         it("returns empty string for cost 0", () => {
-            expect(SquaddieActionInspector.formatActionPointCost(0)).toBe("")
+            expect(SquaddieActionInspector.actionCostSuffix(0)).toBe("")
         })
 
         it("returns empty string for undefined cost", () => {
-            expect(SquaddieActionInspector.formatActionPointCost(undefined)).toBe("")
+            expect(SquaddieActionInspector.actionCostSuffix(undefined)).toBe("")
+        })
+
+        it("appends cooldown turns after AP cost", () => {
+            expect(SquaddieActionInspector.actionCostSuffix(1, 2)).toBe(" (1 AP, 2-turn cooldown)")
+        })
+
+        it("formats a single cooldown turn as '1-turn cooldown'", () => {
+            expect(SquaddieActionInspector.actionCostSuffix(1, 1)).toBe(" (1 AP, 1-turn cooldown)")
+        })
+
+        it("shows only cooldown when AP cost is 0", () => {
+            expect(SquaddieActionInspector.actionCostSuffix(0, 2)).toBe(" (2-turn cooldown)")
         })
     })
 
     describe("formatSquaddieActions", () => {
-        const emptyBattleSquaddieId = {
-            inBattleSquaddieId: 0,
-            outOfBattleSquaddieId: "test",
-        }
-
         it("returns empty string when both lists are empty", () => {
             const validity: SquaddieActionValidity = {
                 battleSquaddieId: emptyBattleSquaddieId,
                 invalidActions: [],
                 validActions: [],
             }
-            const result = SquaddieActionInspector.formatSquaddieActions(
-                validity,
-                new Map<string, SquaddieAction>()
-            )
-            expect(result).toBe("")
+            expect(SquaddieActionInspector.squaddieActionsText(validity)).toBe("")
         })
 
         it("shows invalid actions with reasons", () => {
@@ -71,29 +79,14 @@ describe("squaddieActionInspector", () => {
                 ],
                 validActions: [],
             }
-            const result = SquaddieActionInspector.formatSquaddieActions(
-                validity,
-                new Map<string, SquaddieAction>()
-            )
+            const result = SquaddieActionInspector.squaddieActionsText(validity)
             expect(result).toContain("Actions:")
             expect(result).toContain("  Invalid:")
-            expect(result).toContain(
-                "    Sword - No applicable targets in range"
-            )
+            expect(result).toContain("    Sword - No applicable targets in range")
             expect(result).not.toContain("  Valid:")
         })
 
         it("shows valid actions with AP costs", () => {
-            const healAction = SquaddieActionService.new({
-                id: "heal",
-                name: "Heal",
-                effectOnActor: {
-                    [DegreeOfSuccess.SUCCESS]: {
-                        actionPoints: {spent: 1},
-                    },
-                },
-            })
-
             const validity: SquaddieActionValidity = {
                 battleSquaddieId: emptyBattleSquaddieId,
                 invalidActions: [],
@@ -101,16 +94,14 @@ describe("squaddieActionInspector", () => {
                     {
                         actionId: "heal",
                         actionName: "Heal",
+                        apCost: 1,
                         reachableCoordinates: [],
                         aimCoordinateResults: [],
                     },
                 ],
             }
 
-            const actionsById = new Map<string, SquaddieAction>()
-            actionsById.set("heal", healAction)
-
-            const result = SquaddieActionInspector.formatSquaddieActions(validity, actionsById)
+            const result = SquaddieActionInspector.squaddieActionsText(validity)
             expect(result).toContain("Actions:")
             expect(result).toContain("  Valid:")
             expect(result).toContain("    Heal (1 AP)")
@@ -118,8 +109,6 @@ describe("squaddieActionInspector", () => {
         })
 
         it("shows End Turn with all AP suffix", () => {
-            const endTurnAction = SquaddieActionService.defaultEndTurn()
-
             const validity: SquaddieActionValidity = {
                 battleSquaddieId: emptyBattleSquaddieId,
                 invalidActions: [],
@@ -127,22 +116,18 @@ describe("squaddieActionInspector", () => {
                     {
                         actionId: "default-end-turn",
                         actionName: "End Turn",
+                        apCost: "all",
                         reachableCoordinates: [],
                         aimCoordinateResults: [],
                     },
                 ],
             }
 
-            const actionsById = new Map<string, SquaddieAction>()
-            actionsById.set("default-end-turn", endTurnAction)
-
-            const result = SquaddieActionInspector.formatSquaddieActions(validity, actionsById)
+            const result = SquaddieActionInspector.squaddieActionsText(validity)
             expect(result).toContain("    End Turn (all AP)")
         })
 
         it("shows Move without AP cost suffix", () => {
-            const moveAction = SquaddieActionService.defaultMove()
-
             const validity: SquaddieActionValidity = {
                 battleSquaddieId: emptyBattleSquaddieId,
                 invalidActions: [],
@@ -156,17 +141,12 @@ describe("squaddieActionInspector", () => {
                 ],
             }
 
-            const actionsById = new Map<string, SquaddieAction>()
-            actionsById.set("default-move", moveAction)
-
-            const result = SquaddieActionInspector.formatSquaddieActions(validity, actionsById)
+            const result = SquaddieActionInspector.squaddieActionsText(validity)
             expect(result).toContain("    Move")
             expect(result).not.toContain("    Move (")
         })
 
         it("shows both invalid and valid sections", () => {
-            const endTurnAction = SquaddieActionService.defaultEndTurn()
-
             const validity: SquaddieActionValidity = {
                 battleSquaddieId: emptyBattleSquaddieId,
                 invalidActions: [
@@ -180,16 +160,14 @@ describe("squaddieActionInspector", () => {
                     {
                         actionId: "default-end-turn",
                         actionName: "End Turn",
+                        apCost: "all",
                         reachableCoordinates: [],
                         aimCoordinateResults: [],
                     },
                 ],
             }
 
-            const actionsById = new Map<string, SquaddieAction>()
-            actionsById.set("default-end-turn", endTurnAction)
-
-            const result = SquaddieActionInspector.formatSquaddieActions(validity, actionsById)
+            const result = SquaddieActionInspector.squaddieActionsText(validity)
             expect(result).toContain("  Invalid:")
             expect(result).toContain("  Valid:")
 
@@ -198,32 +176,36 @@ describe("squaddieActionInspector", () => {
             expect(invalidIndex).toBeLessThan(validIndex)
         })
 
-        it("formats actions from the test harness engine", () => {
-            const { engine, playerSquaddieId: liniSquaddieId } = createSimplePlayerVsEnemyMission()
-            const validity =
-                engine.getSquaddieActionValidity(liniSquaddieId)
-
-            const actionsById = new Map<string, SquaddieAction>()
-            for (const validAction of validity.validActions) {
-                actionsById.set(
-                    validAction.actionId,
-                    engine.getActionById(validAction.actionId)
-                )
+        it("shows cooldown turns alongside AP cost for valid actions with cooldown", () => {
+            const validity: SquaddieActionValidity = {
+                battleSquaddieId: emptyBattleSquaddieId,
+                validActions: [{
+                    actionId: "attack",
+                    actionName: "Attack",
+                    apCost: 1,
+                    cooldownTurns: 2,
+                    reachableCoordinates: [],
+                    aimCoordinateResults: [],
+                }],
+                invalidActions: [],
             }
 
-            const result = SquaddieActionInspector.formatSquaddieActions(validity, actionsById)
+            const result = SquaddieActionInspector.squaddieActionsText(validity)
+            expect(result).toContain("    Attack (1 AP, 2-turn cooldown)")
+        })
+
+        it("shows Move and End Turn in Lini's action list at the start of her turn", () => {
+            const { engine, playerSquaddieId: liniSquaddieId } = createSimplePlayerVsEnemyMission()
+            const validity = engine.getSquaddieActionValidity(liniSquaddieId)
+
+            const result = SquaddieActionInspector.squaddieActionsText(validity)
             expect(result).toContain("Actions:")
             expect(result).toContain("End Turn (all AP)")
             expect(result).toContain("Move")
         })
     })
 
-    describe("buildCombatActionIndex", () => {
-        const emptyBattleSquaddieId = {
-            inBattleSquaddieId: 0,
-            outOfBattleSquaddieId: "test",
-        }
-
+    describe("combatActionIndex", () => {
         it("excludes default-move and default-end-turn from the index", () => {
             const validity: SquaddieActionValidity = {
                 battleSquaddieId: emptyBattleSquaddieId,
@@ -250,7 +232,7 @@ describe("squaddieActionInspector", () => {
                 invalidActions: [],
             }
 
-            const index = SquaddieActionInspector.buildCombatActionIndex(validity)
+            const index = combatActionIndex(validity)
             expect(index).not.toContain("default-move")
             expect(index).not.toContain("default-end-turn")
             expect(index).toContain("attack")
@@ -286,9 +268,9 @@ describe("squaddieActionInspector", () => {
             }
 
             const validIndex =
-                SquaddieActionInspector.buildCombatActionIndex(validValidity)
+                combatActionIndex(validValidity)
             const invalidIndex =
-                SquaddieActionInspector.buildCombatActionIndex(invalidValidity)
+                combatActionIndex(invalidValidity)
 
             expect(validIndex).toEqual(invalidIndex)
             expect(validIndex.indexOf("attack")).toBe(
@@ -316,46 +298,27 @@ describe("squaddieActionInspector", () => {
                 invalidActions: [],
             }
 
-            const index = SquaddieActionInspector.buildCombatActionIndex(validity)
-            expect(index[0]).toBe("apple-action")
-            expect(index[1]).toBe("zebra-action")
+            const index = combatActionIndex(validity)
+            expect(index.indexOf("apple-action")).toBeLessThan(index.indexOf("zebra-action"))
         })
     })
 
     describe("formatSquaddieActionsWithKeys", () => {
-        const emptyBattleSquaddieId = {
-            inBattleSquaddieId: 0,
-            outOfBattleSquaddieId: "test",
-        }
-
         it("shows A1 and A2 for two combat actions in alphabetical order", () => {
-            const healAction = SquaddieActionService.new({
-                id: "heal",
-                name: "Heal",
-                effectOnActor: {
-                    [DegreeOfSuccess.SUCCESS]: {actionPoints: {spent: 2}},
-                },
-            })
-            const attackAction = SquaddieActionService.new({
-                id: "attack",
-                name: "Attack",
-                effectOnActor: {
-                    [DegreeOfSuccess.SUCCESS]: {actionPoints: {spent: 1}},
-                },
-            })
-
             const validity: SquaddieActionValidity = {
                 battleSquaddieId: emptyBattleSquaddieId,
                 validActions: [
                     {
                         actionId: "heal",
                         actionName: "Heal",
+                        apCost: 2,
                         reachableCoordinates: [],
                         aimCoordinateResults: [],
                     },
                     {
                         actionId: "attack",
                         actionName: "Attack",
+                        apCost: 1,
                         reachableCoordinates: [],
                         aimCoordinateResults: [],
                     },
@@ -363,29 +326,20 @@ describe("squaddieActionInspector", () => {
                 invalidActions: [],
             }
 
-            const actionsById = new Map<string, SquaddieAction>()
-            actionsById.set("heal", healAction)
-            actionsById.set("attack", attackAction)
-
-            const result = SquaddieActionInspector.formatSquaddieActionsWithKeys(
-                validity,
-                actionsById
-            )
+            const result = SquaddieActionInspector.squaddieActionsWithKeysText(validity)
 
             expect(result).toContain("A1 - Attack")
             expect(result).toContain("A2 - Heal")
         })
 
         it("shows AE for End Turn and AM for Move", () => {
-            const endTurnAction = SquaddieActionService.defaultEndTurn()
-            const moveAction = SquaddieActionService.defaultMove()
-
             const validity: SquaddieActionValidity = {
                 battleSquaddieId: emptyBattleSquaddieId,
                 validActions: [
                     {
                         actionId: "default-end-turn",
                         actionName: "End Turn",
+                        apCost: "all",
                         reachableCoordinates: [],
                         aimCoordinateResults: [],
                     },
@@ -399,27 +353,12 @@ describe("squaddieActionInspector", () => {
                 invalidActions: [],
             }
 
-            const actionsById = new Map<string, SquaddieAction>()
-            actionsById.set("default-end-turn", endTurnAction)
-            actionsById.set("default-move", moveAction)
-
-            const result = SquaddieActionInspector.formatSquaddieActionsWithKeys(
-                validity,
-                actionsById
-            )
+            const result = SquaddieActionInspector.squaddieActionsWithKeysText(validity)
             expect(result).toContain("AE - End Turn")
             expect(result).toContain("AM - Move")
         })
 
         it("shows invalid actions inline with reason in brackets", () => {
-            const attackAction = SquaddieActionService.new({
-                id: "attack",
-                name: "Attack",
-                effectOnActor: {
-                    [DegreeOfSuccess.SUCCESS]: {actionPoints: {spent: 1}},
-                },
-            })
-
             const validity: SquaddieActionValidity = {
                 battleSquaddieId: emptyBattleSquaddieId,
                 validActions: [],
@@ -427,41 +366,58 @@ describe("squaddieActionInspector", () => {
                     {
                         actionId: "attack",
                         actionName: "Attack",
+                        apCost: 1,
                         reason: "No enemies in range",
                     },
                 ],
             }
 
-            const actionsById = new Map<string, SquaddieAction>()
-            actionsById.set("attack", attackAction)
-
-            const result = SquaddieActionInspector.formatSquaddieActionsWithKeys(
-                validity,
-                actionsById
-            )
+            const result = SquaddieActionInspector.squaddieActionsWithKeysText(validity)
             expect(result).toContain("A1 - Attack")
             expect(result).toContain("[No enemies in range]")
         })
 
-        it("uses the test harness engine to show Lini's actions with A1/A2 keys", () => {
+        it("shows cooldown turns alongside AP cost in the keyed action list", () => {
+            const validity: SquaddieActionValidity = {
+                battleSquaddieId: emptyBattleSquaddieId,
+                validActions: [{
+                    actionId: "attack",
+                    actionName: "Attack",
+                    apCost: 1,
+                    cooldownTurns: 2,
+                    reachableCoordinates: [],
+                    aimCoordinateResults: [],
+                }],
+                invalidActions: [],
+            }
+
+            const result = SquaddieActionInspector.squaddieActionsWithKeysText(validity)
+            expect(result).toContain("A1 - Attack (1 AP, 2-turn cooldown)")
+        })
+
+        it("shows cooldown cost and invalid reason when action is on cooldown", () => {
+            const validity: SquaddieActionValidity = {
+                battleSquaddieId: emptyBattleSquaddieId,
+                validActions: [],
+                invalidActions: [{
+                    actionId: "attack",
+                    actionName: "Attack",
+                    apCost: 1,
+                    cooldownTurns: 2,
+                    reason: "Cannot be used for 1 turn",
+                }],
+            }
+
+            const result = SquaddieActionInspector.squaddieActionsWithKeysText(validity)
+            expect(result).toContain("A1 - Attack (1 AP, 2-turn cooldown)")
+            expect(result).toContain("[Cannot be used for 1 turn]")
+        })
+
+        it("labels Lini's three combat actions A1-A3 and assigns AE and AM to End Turn and Move", () => {
             const { engine, playerSquaddieId: liniId } = createSimplePlayerVsEnemyMission()
             const validity = engine.getSquaddieActionValidity(liniId)
 
-            const actionsById = new Map<string, SquaddieAction>()
-            for (const action of [
-                ...validity.validActions,
-                ...validity.invalidActions,
-            ]) {
-                actionsById.set(
-                    action.actionId,
-                    engine.getActionById(action.actionId)
-                )
-            }
-
-            const result = SquaddieActionInspector.formatSquaddieActionsWithKeys(
-                validity,
-                actionsById
-            )
+            const result = SquaddieActionInspector.squaddieActionsWithKeysText(validity)
 
             expect(result).toContain(`A1 - Blessing`)
             expect(result).toContain(`A2 - Heal`)
@@ -500,7 +456,7 @@ describe("squaddieActionInspector", () => {
                 },
             ]
 
-            const result = SquaddieActionInspector.formatForecast(forecasts, "Lini")
+            const result = SquaddieActionInspector.forecastText(forecasts, "Lini")
             expect(result).toContain("gains ARMOR 1 for 2 turns")
             expect(result).not.toContain("no effect")
         })
@@ -517,7 +473,7 @@ describe("squaddieActionInspector", () => {
                 },
             ]
 
-            const result = SquaddieActionInspector.formatForecast(forecasts, "Lini")
+            const result = SquaddieActionInspector.forecastText(forecasts, "Lini")
             expect(result).not.toContain("Attack modifier")
         })
 
@@ -539,18 +495,7 @@ describe("squaddieActionInspector", () => {
             engine.useActionAndGetResults()
             engine.endSquaddieTurn(liniId)
 
-            for (let i = 0; i < 20; i++) {
-                if (
-                    engine.getCurrentAffiliationTurn() ===
-                    MissionAffiliationTurn.PLAYER_TURN
-                )
-                    break
-                if (engine.getReadiedAction() != undefined) {
-                    engine.useActionAndGetResults()
-                } else {
-                    engine.transitionToNextPhase()
-                }
-            }
+            drainNonPlayerTurns(engine)
 
             engine.readyAction({
                 actor: liniId,
@@ -561,7 +506,7 @@ describe("squaddieActionInspector", () => {
             const forecasts = engine.previewReadiedActionAndForecastResults()
             expect(forecasts.some((f) => f.modifierBreakdown != undefined)).toBe(true)
 
-            const result = SquaddieActionInspector.formatForecast(forecasts, "Slither Demon")
+            const result = SquaddieActionInspector.forecastText(forecasts, "Slither Demon")
             expect(result).not.toContain("Attack modifier:")
         })
 
@@ -583,7 +528,7 @@ describe("squaddieActionInspector", () => {
                 },
             ]
 
-            const result = SquaddieActionInspector.formatForecast(forecasts, "Slither Demon")
+            const result = SquaddieActionInspector.forecastText(forecasts, "Slither Demon")
             expect(result).toContain("MAP -3")
             expect(result).toContain("Attack modifier:")
         })
@@ -606,7 +551,7 @@ describe("squaddieActionInspector", () => {
                 },
             ]
 
-            const result = SquaddieActionInspector.formatForecast(forecasts, "Slither Demon")
+            const result = SquaddieActionInspector.forecastText(forecasts, "Slither Demon")
             expect(result).toContain("MAP -6")
             expect(result).toContain("Attack modifier:")
         })
@@ -630,7 +575,7 @@ describe("squaddieActionInspector", () => {
                 },
             ]
 
-            const result = SquaddieActionInspector.formatForecast(forecasts, "Slither Demon")
+            const result = SquaddieActionInspector.forecastText(forecasts, "Slither Demon")
             expect(result).toContain("actor frightened -2")
             expect(result).toContain("Attack modifier:")
         })
@@ -654,7 +599,7 @@ describe("squaddieActionInspector", () => {
                 },
             ]
 
-            const result = SquaddieActionInspector.formatForecast(forecasts, "Slither Demon")
+            const result = SquaddieActionInspector.forecastText(forecasts, "Slither Demon")
             expect(result).toContain("target frightened +1")
             expect(result).toContain("Attack modifier:")
         })
@@ -686,7 +631,7 @@ describe("squaddieActionInspector", () => {
                 },
             ]
 
-            const result = SquaddieActionInspector.formatForecast(forecasts, "Slither Demon")
+            const result = SquaddieActionInspector.forecastText(forecasts, "Slither Demon")
             expect(result).toContain("pulled 2 tiles toward actor")
             expect(result).not.toContain("no effect")
         })
@@ -715,10 +660,23 @@ describe("squaddieActionInspector", () => {
                 },
             ]
 
-            const result = SquaddieActionInspector.formatForecast(forecasts, "Fracta")
+            const result = SquaddieActionInspector.forecastText(forecasts, "Fracta")
             expect(result).toContain("teleported to (4, 1)")
             expect(result).not.toContain("pulled")
             expect(result).not.toContain("no effect")
         })
     })
 })
+
+function drainNonPlayerTurns(engine: MissionEngine) {
+    const maxIterations = 100
+    for (let i = 0; i < maxIterations; i++) {
+        if (engine.getCurrentAffiliationTurn() === MissionAffiliationTurn.PLAYER_TURN) return
+        if (engine.getReadiedAction() != undefined) {
+            engine.useActionAndGetResults()
+        } else {
+            engine.transitionToNextPhase()
+        }
+    }
+    throw new Error("[drainNonPlayerTurns] PLAYER_TURN was not reached within the iteration limit")
+}

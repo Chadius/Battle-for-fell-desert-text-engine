@@ -294,8 +294,8 @@ describe("processCommand", () => {
                 actingSquaddieId: undefined,
             }
             const result = processCommand("L", engine, context)
-            expect(result.message).toContain("End Turn (all AP)")
-            expect(result.message).toContain("Move")
+            expect(result.message).toContain("AE - End Turn (all AP)")
+            expect(result.message).toContain("AM - Move")
         })
 
         it("shows Scimitar as invalid when no foes in range", () => {

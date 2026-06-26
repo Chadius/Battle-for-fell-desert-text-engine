@@ -7,7 +7,7 @@ import {type MapRenderInfo, renderMap} from "./mapRenderer.js"
 import {inspectCoordinate, parseCoordinate} from "./coordinateInspector.js"
 import {formatSquaddieDetails} from "./squaddieDetailInspector.js"
 import {SquaddieActionInspector} from "./squaddieActionInspector.js"
-import type {SquaddieAction} from "../logic/src/squaddieAction/squaddieAction.js"
+import {combatActionIndex} from "./actionKeyIndex.js"
 import {ControllableSquaddieInspector} from "./controllableSquaddieInspector.js"
 import {MissionObjectiveInspector} from "./missionObjectiveInspector.js"
 import {MovementInspector,} from "./movementInspector.js"
@@ -363,19 +363,6 @@ const handleInspectCoordinate = (
     }
 }
 
-const buildActionsById = (
-    engine: MissionEngine,
-    validity: ReturnType<MissionEngine["getSquaddieActionValidity"]>
-): Map<string, SquaddieAction> => {
-    const actionsById = new Map<string, SquaddieAction>()
-    for (const validAction of validity.validActions) {
-        actionsById.set(validAction.actionId, engine.getActionById(validAction.actionId))
-    }
-    for (const invalidAction of validity.invalidActions) {
-        actionsById.set(invalidAction.actionId, engine.getActionById(invalidAction.actionId))
-    }
-    return actionsById
-}
 
 const handleLookAtSquaddie = (
     engine: MissionEngine | undefined,
@@ -411,11 +398,7 @@ const handleLookAtSquaddie = (
     }
 
     const validity = engine.getSquaddieActionValidity(context.selectedSquaddieId)
-    const actionsById = buildActionsById(engine, validity)
-    const actionsOutput = SquaddieActionInspector.formatSquaddieActionsWithKeys(
-        validity,
-        actionsById
-    )
+    const actionsOutput = SquaddieActionInspector.squaddieActionsWithKeysText(validity)
     if (actionsOutput.length > 0) {
         lines.push(actionsOutput)
     }
@@ -435,11 +418,7 @@ const handleListActions = (
     }
 
     const validity = engine.getSquaddieActionValidity(context.selectedSquaddieId)
-    const actionsById = buildActionsById(engine, validity)
-    const message = SquaddieActionInspector.formatSquaddieActionsWithKeys(
-        validity,
-        actionsById
-    )
+    const message = SquaddieActionInspector.squaddieActionsWithKeysText(validity)
 
     return {action: "selectAction", message}
 }
@@ -513,7 +492,7 @@ const handleSelectNumberedAction = (
 ): CommandResult => {
     const actingSquaddieId = context.selectedSquaddieId!
     const validity = engine.getSquaddieActionValidity(actingSquaddieId)
-    const combatIndex = SquaddieActionInspector.buildCombatActionIndex(validity)
+    const combatIndex = combatActionIndex(validity)
 
     const actionId = combatIndex[num - 1]
     if (actionId == undefined) {
@@ -568,7 +547,7 @@ const handleInitiateCombatActionWith1Target = (targetIds: BattleSquaddieId[], en
 
     const forecasts = engine.previewReadiedActionAndForecastResults()
     const targetName = engine.getSquaddieInfo(targetId).name
-    const forecastText = SquaddieActionInspector.formatForecast(
+    const forecastText = SquaddieActionInspector.forecastText(
         forecasts,
         targetName
     )
@@ -630,7 +609,7 @@ const handleInitiateCombatActionWithActorAsAimCoordinate = (
             const targetForecasts = forecasts.filter(
                 (f) => f.battleSquaddieId.inBattleSquaddieId === targetId.inBattleSquaddieId
             )
-            return SquaddieActionInspector.formatForecast(targetForecasts, engine.getSquaddieInfo(targetId).name)
+            return SquaddieActionInspector.forecastText(targetForecasts, engine.getSquaddieInfo(targetId).name)
         })
         .join("\n")
 
@@ -854,7 +833,7 @@ const handleCombatActionTargetSelection = (
     let forecastText: string
     if (allTargetIds.length === 1) {
         const targetName = engine.getSquaddieInfo(allTargetIds[0]).name
-        forecastText = SquaddieActionInspector.formatForecast(forecasts, targetName)
+        forecastText = SquaddieActionInspector.forecastText(forecasts, targetName)
     } else {
         forecastText = allTargetIds
             .map((targetId) => {
@@ -862,7 +841,7 @@ const handleCombatActionTargetSelection = (
                     (f) => f.battleSquaddieId.inBattleSquaddieId === targetId.inBattleSquaddieId
                 )
                 const name = engine.getSquaddieInfo(targetId).name
-                return SquaddieActionInspector.formatForecast(targetForecasts, name)
+                return SquaddieActionInspector.forecastText(targetForecasts, name)
             })
             .join("\n")
     }
@@ -1315,7 +1294,7 @@ const handleTeleportDestinationSelection = (
     const targetName = engine.getSquaddieInfo(targetId).name
     const actorName = engine.getSquaddieInfo(actorId).name
     const actionDef = engine.getActionById(actionId)
-    const forecastText = SquaddieActionInspector.formatForecast(forecasts, targetName)
+    const forecastText = SquaddieActionInspector.forecastText(forecasts, targetName)
 
     const overview = engine.getMapOverview()
     const turnNumber = engine.getCurrentTurnNumber()
