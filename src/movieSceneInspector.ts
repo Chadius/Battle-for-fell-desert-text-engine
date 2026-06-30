@@ -1,5 +1,5 @@
 import type { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
-import { MovieSceneType } from "../logic/src/mission/missionEngine/missionEngine.js"
+import { MovieSceneType } from "../logic/src/movie/movieScene.js"
 
 export type CurrentScene = NonNullable<
     NonNullable<ReturnType<MissionEngine["getMovieStatus"]>>["currentScene"]

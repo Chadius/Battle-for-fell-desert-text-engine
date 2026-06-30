@@ -3,24 +3,22 @@ import type { SerializedSquaddieActionResult } from "../logic/src/squaddieAction
 import {
     MovieEngineCommand,
     type TMovieEngineCommand,
-} from "../logic/src/mission/missionEngine/missionEngine.js"
+} from "../logic/src/movie/movieEngine.js"
 import { sceneDisplayText, sceneIsWaitingForDecision, type CurrentScene } from "./movieSceneInspector.js"
 import {
     processCommand,
     InteractionPhase,
 } from "./commandProcessor.js"
 import type { CommandContext } from "./commandProcessor.js"
-import { MissionObjectiveInspector } from "./missionObjectiveInspector.js"
+import { MissionObjectiveInspector, isFailureObjective } from "./missionObjectiveInspector.js"
 import { conditionTypeName } from "./squaddieDetailInspector.js"
 import {
     MissionAffiliationTurn,
-    MissionTurnService,
     type TMissionAffiliationTurn,
 } from "../logic/src/mission/missionTurn.js"
-import type { TSquaddieAffiliation } from "../logic/src/affiliation/affiliation.js"
 import { renderMap, type MapRenderInfo } from "./mapRenderer.js"
+import { baseRenderInfo } from "./mapDataGatherer.js"
 import { EnemyAI } from "./enemyAI.js"
-import { MissionObjectiveRewardType } from "../logic/src/mission/missionObjectiveReward.js"
 import type { MissionObjective } from "../logic/src/mission/missionObjective.js"
 
 const MAX_PHASE_TRANSITIONS = 20
@@ -78,23 +76,9 @@ export class TextMissionRunner {
         if (this.overlayMap != undefined) {
             return this.overlayMap
         }
-        const overview = this.engine.getMapOverview()
+        const { overview, turnNumber, currentAffiliation, squaddieAffiliations } =
+            baseRenderInfo(this.engine)
         const summary = this.engine.getSerializedInMissionSummary()
-        const turnNumber = this.engine.getCurrentTurnNumber()
-        const affiliationTurn = this.engine.getCurrentAffiliationTurn()
-        const currentAffiliation =
-            MissionTurnService.getSquaddieAffiliationForAffiliationTurn(affiliationTurn)
-
-        const squaddieAffiliations = new Map<string, TSquaddieAffiliation>()
-        for (const row of overview.tiles) {
-            for (const tile of row) {
-                if (tile.squaddieId != undefined) {
-                    const info = this.engine.getSquaddieInfo(tile.squaddieId)
-                    squaddieAffiliations.set(tile.squaddieId.outOfBattleSquaddieId, info.affiliation)
-                }
-            }
-        }
-
         const objectiveEntries = MissionObjectiveInspector.gatherEntries(this.engine)
         const objectivesDisplay = MissionObjectiveInspector.formatEntries(objectiveEntries)
         const renderInfo: MapRenderInfo = {
@@ -107,12 +91,11 @@ export class TextMissionRunner {
         return renderMap(overview, renderInfo)
     }
 
-    // Maps raw player input to a MovieEngineCommand, or "quit", or undefined (unrecognised).
+    // Maps raw player input to a MovieEngineCommand, or undefined (unrecognised).
     private movieCommandFromInput(
         input: string
-    ): TMovieEngineCommand | "quit" | undefined {
+    ): TMovieEngineCommand | undefined {
         const normalized = input.trim().toUpperCase()
-        if (normalized === "Q") return "quit"
         if (normalized === "" || normalized === "N") return MovieEngineCommand.CONFIRM
         if (normalized === "X") return MovieEngineCommand.COMPLETE_SCENE
         if (normalized === "F") return MovieEngineCommand.FAST_FORWARD
@@ -128,8 +111,8 @@ export class TextMissionRunner {
 
     // Handles all input while a movie is playing. Returns to normal gameplay once the movie ends.
     private processMovieInput(input: string): ProcessInputResult {
+        if (input.trim().toUpperCase() === "Q") return { text: "", shouldQuit: true }
         const command = this.movieCommandFromInput(input)
-        if (command === "quit") return { text: "", shouldQuit: true }
 
         // Decision scenes are blocking — recognized movie commands are silently re-displayed
         const currentScene = this.engine.getMovieStatus()?.currentScene
@@ -186,8 +169,25 @@ export class TextMissionRunner {
         return this.missionEndResultOrContinue()
     }
 
-    private missionEndResultOrContinue(prependText = ""): ProcessInputResult {
-        return this.missionEndResult(prependText) ?? { text: prependText, shouldQuit: false }
+    private missionEndResultOrContinue(priorText = ""): ProcessInputResult {
+        if (this.engine.isDone()) {
+            const rewarded = this.engine.getCompletedAndRewardedMissionObjectives()
+            const text = [priorText, this.missionSummary(rewarded)].filter((s) => s.length > 0).join("\n")
+            return { text, shouldQuit: true }
+        }
+        const terminalObjectives = this.getPendingTerminalObjectives()
+        if (terminalObjectives.length > 0) {
+            this.rewardTerminalObjectives(terminalObjectives)
+            const text = [priorText, this.missionSummary(terminalObjectives)].filter((s) => s.length > 0).join("\n")
+            return { text, shouldQuit: true }
+        }
+        return { text: priorText, shouldQuit: false }
+    }
+
+    private rewardTerminalObjectives(objectives: MissionObjective[]): void {
+        for (const objective of objectives) {
+            this.engine.markMissionObjectiveAsRewarded(objective.id)
+        }
     }
 
     processInput(input: string): ProcessInputResult {
@@ -237,42 +237,14 @@ export class TextMissionRunner {
         }
     }
 
-    // Returns a quit result if the mission has ended, or undefined if the game continues.
-    private missionEndResult(prependText = ""): ProcessInputResult | undefined {
-        if (this.engine.isDone()) {
-            const rewarded = this.engine.getCompletedAndRewardedMissionObjectives()
-            const summaryText = this.formatMissionSummary(rewarded)
-            return {
-                text: [prependText, summaryText].filter((s) => s.length > 0).join("\n"),
-                shouldQuit: true,
-            }
-        }
-        const terminalObjectives = this.getPendingTerminalObjectives()
-        if (terminalObjectives.length > 0) {
-            const summaryText = this.formatMissionSummary(terminalObjectives)
-            for (const objective of terminalObjectives) {
-                this.engine.markMissionObjectiveAsRewarded(objective.id)
-            }
-            return {
-                text: [prependText, summaryText].filter((s) => s.length > 0).join("\n"),
-                shouldQuit: true,
-            }
-        }
-        return undefined
-    }
-
     private getPendingTerminalObjectives(): MissionObjective[] {
         return this.engine.getCompletedTerminalButNotRewardedObjectives()
     }
 
-    private formatMissionSummary(terminalObjectives: MissionObjective[]): string {
+    private missionSummary(terminalObjectives: MissionObjective[]): string {
         const lines: string[] = []
 
-        const isFailure = terminalObjectives.some((obj) =>
-            obj.rewards.some(
-                (reward) => reward.type === MissionObjectiveRewardType.MISSION_FAILURE
-            )
-        )
+        const isFailure = terminalObjectives.some(isFailureObjective)
         lines.push(
             isFailure ? "Mission Failed!" : "Mission Complete!",
             `Completed on turn ${this.engine.getCurrentTurnNumber()}.`

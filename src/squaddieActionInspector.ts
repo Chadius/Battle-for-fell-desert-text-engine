@@ -10,8 +10,9 @@ import type { TDegreeOfSuccess } from "../logic/src/degreesOfSuccess/degreeOfSuc
 export const SquaddieActionInspector = {
     actionCostSuffix: (
         cost: ActionPointCost | undefined,
-        cooldownTurns?: number
-    ) => actionCostSuffix(cost, cooldownTurns),
+        cooldownTurns?: number,
+        usesPerTurn?: number
+    ) => actionCostSuffix(cost, cooldownTurns, usesPerTurn),
     squaddieActionsText: (
         validity: SquaddieActionValidity,
     ) => squaddieActionsText(validity),
@@ -26,7 +27,8 @@ export const SquaddieActionInspector = {
 
 const actionCostSuffix = (
     cost: ActionPointCost | undefined,
-    cooldownTurns?: number
+    cooldownTurns?: number,
+    usesPerTurn?: number
 ): string => {
     const parts: string[] = []
     if (cost === "all") {
@@ -36,6 +38,9 @@ const actionCostSuffix = (
     }
     if (cooldownTurns != undefined) {
         parts.push(`${cooldownTurns}-turn cooldown`)
+    }
+    if (usesPerTurn != undefined) {
+        parts.push(`${usesPerTurn}x/turn`)
     }
     if (parts.length === 0) return ""
     return ` (${parts.join(", ")})`
@@ -62,7 +67,7 @@ const squaddieActionsText = (
     if (validActions.length > 0) {
         lines.push("  Valid:")
         for (const action of validActions) {
-            lines.push(`    ${action.actionName}${actionCostSuffix(action.apCost, action.cooldownTurns)}`)
+            lines.push(`    ${action.actionName}${actionCostSuffix(action.apCost, action.cooldownTurns, action.usesPerTurn)}`)
         }
     }
 
@@ -89,11 +94,12 @@ const squaddieActionsWithKeysText = (
 
         const validAction = validMap.get(actionId)
         const invalidAction = invalidMap.get(actionId)
-        const actionName =
-            validAction?.actionName ?? invalidAction?.actionName ?? actionId
+        const resolvedAction = validAction ?? invalidAction
+        const actionName = resolvedAction?.actionName ?? actionId
         const suffix = actionCostSuffix(
-            (validAction ?? invalidAction)?.apCost,
-            (validAction ?? invalidAction)?.cooldownTurns
+            resolvedAction?.apCost,
+            resolvedAction?.cooldownTurns,
+            resolvedAction?.usesPerTurn
         )
 
         if (invalidAction == undefined) {
@@ -105,7 +111,7 @@ const squaddieActionsWithKeysText = (
 
     const endTurnValid = validMap.get(DEFAULT_END_TURN_ACTION_ID)
     if (endTurnValid != undefined) {
-        lines.push(`  AE - ${endTurnValid.actionName}${actionCostSuffix(endTurnValid.apCost, endTurnValid.cooldownTurns)}`)
+        lines.push(`  AE - ${endTurnValid.actionName}${actionCostSuffix(endTurnValid.apCost, endTurnValid.cooldownTurns, endTurnValid.usesPerTurn)}`)
     }
 
     const moveValid = validMap.get(DEFAULT_MOVE_ACTION_ID)

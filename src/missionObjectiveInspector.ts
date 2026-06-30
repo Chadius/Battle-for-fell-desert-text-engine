@@ -2,7 +2,11 @@ import type { MissionEngine } from "../logic/src/mission/missionEngine/missionEn
 import type { MissionObjective } from "../logic/src/mission/missionObjective.js"
 import { MissionObjectiveRewardType } from "../logic/src/mission/missionObjectiveReward.js"
 import { MissionObjectiveCriteriaType } from "../logic/src/mission/missionObjectiveCriteria.js"
-import type { SquaddiesDefeatedCriteria } from "../logic/src/mission/missionObjectiveCriteria.js"
+import type {
+    SquaddiesDefeatedCriteria,
+    SquaddiesInjuredCriteria,
+    SpecificSquaddiesDefeatedCriteria,
+} from "../logic/src/mission/missionObjectiveCriteria.js"
 import {
     SquaddieAffiliation,
     type TSquaddieAffiliation,
@@ -21,7 +25,7 @@ const affiliationDisplayNames: Record<TSquaddieAffiliation, string> = {
     [SquaddieAffiliation.NONE]: "neutrals",
 }
 
-const isFailureObjective = (objective: MissionObjective): boolean => {
+export const isFailureObjective = (objective: MissionObjective): boolean => {
     return objective.rewards.some(
         (reward) => reward.type === MissionObjectiveRewardType.MISSION_FAILURE
     )
@@ -75,6 +79,20 @@ const buildCriteriaDescription = (
     return "Defeat squaddies"
 }
 
+const injuredCriteriaDescription = (
+    criteria: SquaddiesInjuredCriteria
+): string => {
+    const ids = [...(criteria.outOfBattleSquaddieIds ?? [])]
+    return ids.length > 0 ? `Injure: ${ids.join(", ")}` : "Injure a squaddie"
+}
+
+const specificDefeatedCriteriaDescription = (
+    criteria: SpecificSquaddiesDefeatedCriteria
+): string => {
+    const ids = [...(criteria.outOfBattleSquaddieIds ?? [])]
+    return ids.length > 0 ? `Defeat specific: ${ids.join(", ")}` : "Defeat a specific squaddie"
+}
+
 const objectiveToEntry = (
     engine: MissionEngine,
     objective: MissionObjective,
@@ -85,6 +103,12 @@ const objectiveToEntry = (
     for (const criterion of objective.criteria) {
         if (criterion.type === MissionObjectiveCriteriaType.SQUADDIES_DEFEATED) {
             descriptions.push(buildCriteriaDescription(engine, criterion))
+        }
+        if (criterion.type === MissionObjectiveCriteriaType.SQUADDIES_INJURED) {
+            descriptions.push(injuredCriteriaDescription(criterion))
+        }
+        if (criterion.type === MissionObjectiveCriteriaType.SPECIFIC_SQUADDIES_DEFEATED) {
+            descriptions.push(specificDefeatedCriteriaDescription(criterion))
         }
     }
 

@@ -21,11 +21,12 @@ import {
 } from "../logic/src/coordinateMap/path/path.js"
 import type { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
 
+const emptyBattleSquaddieId = {
+    inBattleSquaddieId: 0,
+    outOfBattleSquaddieId: "test",
+}
+
 describe("squaddieActionInspector", () => {
-    const emptyBattleSquaddieId = {
-        inBattleSquaddieId: 0,
-        outOfBattleSquaddieId: "test",
-    }
 
     describe("actionCostSuffix", () => {
         it("returns AP cost suffix for numeric cost", () => {
@@ -54,6 +55,22 @@ describe("squaddieActionInspector", () => {
 
         it("shows only cooldown when AP cost is 0", () => {
             expect(SquaddieActionInspector.actionCostSuffix(0, 2)).toBe(" (2-turn cooldown)")
+        })
+
+        it("when an action has an AP cost and a use limit, both appear in the suffix", () => {
+            expect(SquaddieActionInspector.actionCostSuffix(1, undefined, 2)).toBe(" (1 AP, 2x/turn)")
+        })
+
+        it("shows usesPerTurn of 1 as '1x/turn'", () => {
+            expect(SquaddieActionInspector.actionCostSuffix(1, undefined, 1)).toBe(" (1 AP, 1x/turn)")
+        })
+
+        it("shows all three parts together when AP cost, cooldown, and usesPerTurn are set", () => {
+            expect(SquaddieActionInspector.actionCostSuffix(1, 2, 3)).toBe(" (1 AP, 2-turn cooldown, 3x/turn)")
+        })
+
+        it("shows only usesPerTurn when AP cost is 0", () => {
+            expect(SquaddieActionInspector.actionCostSuffix(0, undefined, 1)).toBe(" (1x/turn)")
         })
     })
 
@@ -192,6 +209,33 @@ describe("squaddieActionInspector", () => {
 
             const result = SquaddieActionInspector.squaddieActionsText(validity)
             expect(result).toContain("    Attack (1 AP, 2-turn cooldown)")
+        })
+
+        it("shows usesPerTurn alongside AP cost for valid limited-use actions", () => {
+            const validity = validityWithValidAction({ actionName: "Blast", apCost: 1, usesPerTurn: 2 })
+
+            const result = SquaddieActionInspector.squaddieActionsText(validity)
+            expect(result).toContain("    Blast (1 AP, 2x/turn)")
+        })
+
+        it("shows the invalid reason for an action that has exceeded its use limit", () => {
+            const validity = validityWithInvalidAction({
+                actionName: "Blast",
+                apCost: 1,
+                usesPerTurn: 1,
+                reason: "Already used 1 of 1 time this turn",
+            })
+
+            const result = SquaddieActionInspector.squaddieActionsText(validity)
+            expect(result).toContain("    Blast - Already used 1 of 1 time this turn")
+        })
+
+        it("shows Limited Blast with its use limit in Lini's action list at the start of her turn", () => {
+            const { engine, playerSquaddieId: liniId } = createSimplePlayerVsEnemyMission()
+            const validity = engine.getSquaddieActionValidity(liniId)
+
+            const result = SquaddieActionInspector.squaddieActionsText(validity)
+            expect(result).toContain("Limited Blast (1 AP, 1x/turn)")
         })
 
         it("shows Move and End Turn in Lini's action list at the start of her turn", () => {
@@ -413,7 +457,27 @@ describe("squaddieActionInspector", () => {
             expect(result).toContain("[Cannot be used for 1 turn]")
         })
 
-        it("labels Lini's three combat actions A1-A3 and assigns AE and AM to End Turn and Move", () => {
+        it("shows usesPerTurn alongside AP cost in the keyed action list for limited-use actions", () => {
+            const validity = validityWithValidAction({ actionName: "Blast", apCost: 1, usesPerTurn: 2 })
+
+            const result = SquaddieActionInspector.squaddieActionsWithKeysText(validity)
+            expect(result).toContain("A1 - Blast (1 AP, 2x/turn)")
+        })
+
+        it("shows usesPerTurn and invalid reason when action exceeds its use limit", () => {
+            const validity = validityWithInvalidAction({
+                actionName: "Blast",
+                apCost: 1,
+                usesPerTurn: 1,
+                reason: "Already used 1 of 1 time this turn",
+            })
+
+            const result = SquaddieActionInspector.squaddieActionsWithKeysText(validity)
+            expect(result).toContain("A1 - Blast (1 AP, 1x/turn)")
+            expect(result).toContain("[Already used 1 of 1 time this turn]")
+        })
+
+        it("labels Lini's five combat actions A1-A5 and assigns AE and AM to End Turn and Move", () => {
             const { engine, playerSquaddieId: liniId } = createSimplePlayerVsEnemyMission()
             const validity = engine.getSquaddieActionValidity(liniId)
 
@@ -421,7 +485,9 @@ describe("squaddieActionInspector", () => {
 
             expect(result).toContain(`A1 - Blessing`)
             expect(result).toContain(`A2 - Heal`)
-            expect(result).toContain(`A3 - Scimitar`)
+            expect(result).toContain(`A3 - Limited Blast`)
+            expect(result).toContain(`A4 - Scimitar`)
+            expect(result).toContain(`A5 - Solar Sphere`)
             expect(result).toContain("AE - End Turn")
             expect(result).toContain("AM - Move")
         })
@@ -667,6 +733,44 @@ describe("squaddieActionInspector", () => {
         })
     })
 })
+
+function validityWithValidAction(opts: {
+    actionName: string
+    apCost: number
+    usesPerTurn?: number
+}): SquaddieActionValidity {
+    return {
+        battleSquaddieId: emptyBattleSquaddieId,
+        validActions: [{
+            actionId: opts.actionName.toLowerCase(),
+            actionName: opts.actionName,
+            apCost: opts.apCost,
+            usesPerTurn: opts.usesPerTurn,
+            reachableCoordinates: [],
+            aimCoordinateResults: [],
+        }],
+        invalidActions: [],
+    }
+}
+
+function validityWithInvalidAction(opts: {
+    actionName: string
+    apCost: number
+    usesPerTurn?: number
+    reason: string
+}): SquaddieActionValidity {
+    return {
+        battleSquaddieId: emptyBattleSquaddieId,
+        validActions: [],
+        invalidActions: [{
+            actionId: opts.actionName.toLowerCase(),
+            actionName: opts.actionName,
+            apCost: opts.apCost,
+            usesPerTurn: opts.usesPerTurn,
+            reason: opts.reason,
+        }],
+    }
+}
 
 function drainNonPlayerTurns(engine: MissionEngine) {
     const maxIterations = 100

@@ -4,6 +4,7 @@ import type {BattleSquaddieId} from "../logic/src/squaddie/inBattle/battleSquadd
 import {MissionTurnService, type TMissionAffiliationTurn,} from "../logic/src/mission/missionTurn.js"
 import type {TSquaddieAffiliation} from "../logic/src/affiliation/affiliation.js"
 import {type MapRenderInfo, renderMap} from "./mapRenderer.js"
+import {baseRenderInfo} from "./mapDataGatherer.js"
 import {inspectCoordinate, parseCoordinate} from "./coordinateInspector.js"
 import {formatSquaddieDetails} from "./squaddieDetailInspector.js"
 import {SquaddieActionInspector} from "./squaddieActionInspector.js"
@@ -28,6 +29,13 @@ export const InteractionPhase = {
 } as const
 
 export type TInteractionPhase = (typeof InteractionPhase)[keyof typeof InteractionPhase]
+
+const browsingContext = (): CommandContext => ({
+    selectedSquaddieId: undefined,
+    interactionPhase: InteractionPhase.BROWSING,
+    actingSquaddieId: undefined,
+    pendingActionId: undefined,
+})
 
 export type CommandAction =
     | "quit"
@@ -231,24 +239,6 @@ const handleSetDebugFlag = (
     }
 }
 
-const buildSquaddieAffiliations = (
-    engine: MissionEngine,
-    overview: ReturnType<MissionEngine["getMapOverview"]>
-): Map<string, TSquaddieAffiliation> => {
-    const squaddieAffiliations = new Map<string, TSquaddieAffiliation>()
-    for (const row of overview.tiles) {
-        for (const tile of row) {
-            if (tile.squaddieId != undefined) {
-                const info = engine.getSquaddieInfo(tile.squaddieId)
-                squaddieAffiliations.set(
-                    tile.squaddieId.outOfBattleSquaddieId,
-                    info.affiliation
-                )
-            }
-        }
-    }
-    return squaddieAffiliations
-}
 
 // Renders the map with the action line, aim coordinate, and hit targets highlighted.
 // "//" marks cells the bolt passes through; "<>" marks the aim coordinate; "HT" marks squaddies that will be hit.
@@ -289,12 +279,7 @@ const buildActionEffectMapText = (
             : undefined
 
     const tileOverlays = MovementInspector.buildActionEffectOverlay(aimCoordinate, hitPositions, lineCoordinates)
-    const overview = engine.getMapOverview()
-    const turnNumber = engine.getCurrentTurnNumber()
-    const affiliationTurn = engine.getCurrentAffiliationTurn()
-    const currentAffiliation =
-        MissionTurnService.getSquaddieAffiliationForAffiliationTurn(affiliationTurn)
-    const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
+    const { overview, turnNumber, currentAffiliation, squaddieAffiliations } = baseRenderInfo(engine)
     return renderMap(overview, {
         turnNumber,
         currentAffiliation,
@@ -311,16 +296,8 @@ const handleShowMap = (engine?: MissionEngine): CommandResult => {
         }
     }
 
-    const overview = engine.getMapOverview()
+    const { overview, turnNumber, currentAffiliation, squaddieAffiliations } = baseRenderInfo(engine)
     const summary = engine.getSerializedInMissionSummary()
-
-    const turnNumber = engine.getCurrentTurnNumber()
-    const affiliationTurn = engine.getCurrentAffiliationTurn()
-    const currentAffiliation =
-        MissionTurnService.getSquaddieAffiliationForAffiliationTurn(
-            affiliationTurn
-        )
-    const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
     const objectiveEntries = MissionObjectiveInspector.gatherEntries(engine)
     const objectivesDisplay =
         MissionObjectiveInspector.formatEntries(objectiveEntries)
@@ -658,11 +635,7 @@ const handleInitiateCombatAction = (
             return { action: "selectAction", message: `No valid aim coordinates for this action.` }
         }
         const tileOverlays = MovementInspector.buildTargetOverlay(aimCoordinates)
-        const overview = engine.getMapOverview()
-        const turnNumber = engine.getCurrentTurnNumber()
-        const affiliationTurn = engine.getCurrentAffiliationTurn()
-        const currentAffiliation = MissionTurnService.getSquaddieAffiliationForAffiliationTurn(affiliationTurn)
-        const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
+        const { overview, turnNumber, currentAffiliation, squaddieAffiliations } = baseRenderInfo(engine)
         const mapText = renderMap(overview, { turnNumber, currentAffiliation, squaddieAffiliations, tileOverlays })
         return {
             action: "executeAction",
@@ -711,12 +684,7 @@ const handleInitiateCombatAction = (
     }
 
     const tileOverlays = MovementInspector.buildTargetOverlay(validAimCoordinates)
-    const overview = engine.getMapOverview()
-    const turnNumber = engine.getCurrentTurnNumber()
-    const affiliationTurn = engine.getCurrentAffiliationTurn()
-    const currentAffiliation =
-        MissionTurnService.getSquaddieAffiliationForAffiliationTurn(affiliationTurn)
-    const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
+    const { overview, turnNumber, currentAffiliation, squaddieAffiliations } = baseRenderInfo(engine)
 
     const renderInfo: MapRenderInfo = {
         turnNumber,
@@ -751,12 +719,7 @@ const handleCombatActionTargetSelection = (
         return {
             action: "cancelAction",
             message: "No engine available to execute action.",
-            updatedContext: {
-                selectedSquaddieId: undefined,
-                interactionPhase: InteractionPhase.BROWSING,
-                actingSquaddieId: undefined,
-                pendingActionId: undefined,
-            },
+            updatedContext: browsingContext(),
         }
     }
 
@@ -765,12 +728,7 @@ const handleCombatActionTargetSelection = (
         return {
             action: "cancelAction",
             message: "Action cancelled.",
-            updatedContext: {
-                selectedSquaddieId: undefined,
-                interactionPhase: InteractionPhase.BROWSING,
-                actingSquaddieId: undefined,
-                pendingActionId: undefined,
-            },
+            updatedContext: browsingContext(),
         }
     }
 
@@ -800,12 +758,7 @@ const handleCombatActionTargetSelection = (
         return {
             action: "cancelAction",
             message: `No targets in that direction. Action cancelled.`,
-            updatedContext: {
-                selectedSquaddieId: undefined,
-                interactionPhase: InteractionPhase.BROWSING,
-                actingSquaddieId: undefined,
-                pendingActionId: undefined,
-            },
+            updatedContext: browsingContext(),
         }
     }
 
@@ -886,12 +839,7 @@ const handleCombatActionTargetSelectionIsActionValid = (
             isValid: false, commandResult: {
                 action: "cancelAction",
                 message: "Action is no longer valid. Action cancelled.",
-                updatedContext: {
-                    selectedSquaddieId: undefined,
-                    interactionPhase: InteractionPhase.BROWSING,
-                    actingSquaddieId: undefined,
-                    pendingActionId: undefined,
-                },
+                updatedContext: browsingContext(),
             }
         }
     }
@@ -918,12 +866,7 @@ const handleCombatActionTargetSelectionCheckForValidReadyAction = (
             isValid: false, commandResult: {
                 action: "cancelAction",
                 message: readyResult.message ?? "Cannot perform this action.",
-                updatedContext: {
-                    selectedSquaddieId: undefined,
-                    interactionPhase: InteractionPhase.BROWSING,
-                    actingSquaddieId: undefined,
-                    pendingActionId: undefined,
-                },
+                updatedContext: browsingContext(),
             }
         }
     }
@@ -939,12 +882,7 @@ const handleActionConfirmation = (
         return {
             action: "cancelAction",
             message: "No engine available.",
-            updatedContext: {
-                selectedSquaddieId: undefined,
-                interactionPhase: InteractionPhase.BROWSING,
-                actingSquaddieId: undefined,
-                pendingActionId: undefined,
-            },
+            updatedContext: browsingContext(),
         }
     }
 
@@ -958,12 +896,7 @@ const handleActionConfirmation = (
         return {
             action: "executeAction",
             message: resultText,
-            updatedContext: {
-                selectedSquaddieId: undefined,
-                interactionPhase: InteractionPhase.BROWSING,
-                actingSquaddieId: undefined,
-                pendingActionId: undefined,
-            },
+            updatedContext: browsingContext(),
         }
     }
 
@@ -983,12 +916,7 @@ const handleActionConfirmation = (
         return {
             action: "cancelAction",
             message: "Action cancelled.",
-            updatedContext: {
-                selectedSquaddieId: undefined,
-                interactionPhase: InteractionPhase.BROWSING,
-                actingSquaddieId: undefined,
-                pendingActionId: undefined,
-            },
+            updatedContext: browsingContext(),
         }
     }
 
@@ -1036,12 +964,7 @@ const handleInitiateActorChosenMovementAction = (
     const movementOptions = engine.getTargetDestinationsForAction(actingSquaddieId, actionId)
     const tileOverlays = MovementInspector.buildMovementOverlay(movementOptions)
 
-    const overview = engine.getMapOverview()
-    const turnNumber = engine.getCurrentTurnNumber()
-    const affiliationTurn = engine.getCurrentAffiliationTurn()
-    const currentAffiliation =
-        MissionTurnService.getSquaddieAffiliationForAffiliationTurn(affiliationTurn)
-    const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
+    const { overview, turnNumber, currentAffiliation, squaddieAffiliations } = baseRenderInfo(engine)
 
     const renderInfo: MapRenderInfo = {
         turnNumber,
@@ -1079,12 +1002,7 @@ const handleActorChosenMovementTargetSelection = (
         return {
             action: "moveSquaddie",
             message: "No engine available to execute movement.",
-            updatedContext: {
-                selectedSquaddieId: undefined,
-                interactionPhase: InteractionPhase.BROWSING,
-                actingSquaddieId: undefined,
-                pendingActionId: undefined,
-            },
+            updatedContext: browsingContext(),
         }
     }
 
@@ -1093,12 +1011,7 @@ const handleActorChosenMovementTargetSelection = (
         return {
             action: "moveSquaddie",
             message: "Movement cancelled.",
-            updatedContext: {
-                selectedSquaddieId: undefined,
-                interactionPhase: InteractionPhase.BROWSING,
-                actingSquaddieId: undefined,
-                pendingActionId: undefined,
-            },
+            updatedContext: browsingContext(),
         }
     }
 
@@ -1118,12 +1031,7 @@ const handleActorChosenMovementTargetSelection = (
         return {
             action: "moveSquaddie",
             message: readyResult.message ?? "Cannot perform this action.",
-            updatedContext: {
-                selectedSquaddieId: undefined,
-                interactionPhase: InteractionPhase.BROWSING,
-                actingSquaddieId: undefined,
-                pendingActionId: undefined,
-            },
+            updatedContext: browsingContext(),
         }
     }
 
@@ -1138,12 +1046,7 @@ const handleActorChosenMovementTargetSelection = (
             ? new Map<string, string>()
             : MovementInspector.buildRouteOverlay(movementResult.movement.expectedPath)
 
-    const overview = engine.getMapOverview()
-    const turnNumber = engine.getCurrentTurnNumber()
-    const affiliationTurn = engine.getCurrentAffiliationTurn()
-    const currentAffiliation =
-        MissionTurnService.getSquaddieAffiliationForAffiliationTurn(affiliationTurn)
-    const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
+    const { overview, turnNumber, currentAffiliation, squaddieAffiliations } = baseRenderInfo(engine)
 
     const renderInfo: MapRenderInfo = {
         turnNumber,
@@ -1188,23 +1091,13 @@ const handleAfterTeleportPrimaryTargetSelected = (
         return {
             action: "cancelAction",
             message: "No valid destinations for this action.",
-            updatedContext: {
-                selectedSquaddieId: undefined,
-                interactionPhase: InteractionPhase.BROWSING,
-                actingSquaddieId: undefined,
-                pendingActionId: undefined,
-            },
+            updatedContext: browsingContext(),
         }
     }
 
     const tileOverlays = MovementInspector.buildMovementOverlay(validDestinations)
 
-    const overview = engine.getMapOverview()
-    const turnNumber = engine.getCurrentTurnNumber()
-    const affiliationTurn = engine.getCurrentAffiliationTurn()
-    const currentAffiliation =
-        MissionTurnService.getSquaddieAffiliationForAffiliationTurn(affiliationTurn)
-    const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
+    const { overview, turnNumber, currentAffiliation, squaddieAffiliations } = baseRenderInfo(engine)
 
     const renderInfo: MapRenderInfo = {
         turnNumber,
@@ -1245,12 +1138,7 @@ const handleTeleportDestinationSelection = (
         return {
             action: "cancelAction",
             message: "No engine available to execute action.",
-            updatedContext: {
-                selectedSquaddieId: undefined,
-                interactionPhase: InteractionPhase.BROWSING,
-                actingSquaddieId: undefined,
-                pendingActionId: undefined,
-            },
+            updatedContext: browsingContext(),
         }
     }
 
@@ -1259,12 +1147,7 @@ const handleTeleportDestinationSelection = (
         return {
             action: "cancelAction",
             message: "Action cancelled.",
-            updatedContext: {
-                selectedSquaddieId: undefined,
-                interactionPhase: InteractionPhase.BROWSING,
-                actingSquaddieId: undefined,
-                pendingActionId: undefined,
-            },
+            updatedContext: browsingContext(),
         }
     }
 
@@ -1296,12 +1179,7 @@ const handleTeleportDestinationSelection = (
     const actionDef = engine.getActionById(actionId)
     const forecastText = SquaddieActionInspector.forecastText(forecasts, targetName)
 
-    const overview = engine.getMapOverview()
-    const turnNumber = engine.getCurrentTurnNumber()
-    const affiliationTurn = engine.getCurrentAffiliationTurn()
-    const currentAffiliation =
-        MissionTurnService.getSquaddieAffiliationForAffiliationTurn(affiliationTurn)
-    const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
+    const { overview, turnNumber, currentAffiliation, squaddieAffiliations } = baseRenderInfo(engine)
 
     // Mark the destination tile to show the player where the target will land.
     const tileOverlays = new Map<string, string>([
@@ -1342,14 +1220,7 @@ const handleInitiateMovement = (
     const movementOptions = engine.getMovementOptionsWithCosts(squaddieId)
     const tileOverlays = MovementInspector.buildMovementOverlay(movementOptions)
 
-    const overview = engine.getMapOverview()
-    const turnNumber = engine.getCurrentTurnNumber()
-    const affiliationTurn = engine.getCurrentAffiliationTurn()
-    const currentAffiliation =
-        MissionTurnService.getSquaddieAffiliationForAffiliationTurn(
-            affiliationTurn
-        )
-    const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
+    const { overview, turnNumber, currentAffiliation, squaddieAffiliations } = baseRenderInfo(engine)
 
     const renderInfo: MapRenderInfo = {
         turnNumber,
@@ -1383,12 +1254,7 @@ const handleMovementTargetSelection = (
         return {
             action: "moveSquaddie",
             message: "No engine available to execute movement.",
-            updatedContext: {
-                selectedSquaddieId: undefined,
-                interactionPhase: InteractionPhase.BROWSING,
-                actingSquaddieId: undefined,
-                pendingActionId: undefined,
-            },
+            updatedContext: browsingContext(),
         }
     }
 
@@ -1397,12 +1263,7 @@ const handleMovementTargetSelection = (
         return {
             action: "moveSquaddie",
             message: "Movement cancelled.",
-            updatedContext: {
-                selectedSquaddieId: undefined,
-                interactionPhase: InteractionPhase.BROWSING,
-                actingSquaddieId: undefined,
-                pendingActionId: undefined,
-            },
+            updatedContext: browsingContext(),
         }
     }
 
@@ -1422,12 +1283,7 @@ const handleMovementTargetSelection = (
         return {
             action: "moveSquaddie",
             message: `Coordinate (${desiredTargetCoordinate.row},${desiredTargetCoordinate.col}) is out of reach. Movement cancelled.`,
-            updatedContext: {
-                selectedSquaddieId: undefined,
-                interactionPhase: InteractionPhase.BROWSING,
-                actingSquaddieId: undefined,
-                pendingActionId: undefined,
-            },
+            updatedContext: browsingContext(),
         }
     }
 
@@ -1446,12 +1302,7 @@ const handleMovementTargetSelection = (
         return {
             action: "moveSquaddie",
             message: readyResult.message ?? "Cannot perform this action.",
-            updatedContext: {
-                selectedSquaddieId: undefined,
-                interactionPhase: InteractionPhase.BROWSING,
-                actingSquaddieId: undefined,
-                pendingActionId: undefined,
-            },
+            updatedContext: browsingContext(),
         }
     }
 
@@ -1466,14 +1317,7 @@ const handleMovementTargetSelection = (
             ? new Map<string, string>()
             : MovementInspector.buildRouteOverlay(movementResult.movement.expectedPath)
 
-    const overview = engine.getMapOverview()
-    const turnNumber = engine.getCurrentTurnNumber()
-    const affiliationTurn = engine.getCurrentAffiliationTurn()
-    const currentAffiliation =
-        MissionTurnService.getSquaddieAffiliationForAffiliationTurn(
-            affiliationTurn
-        )
-    const squaddieAffiliations = buildSquaddieAffiliations(engine, overview)
+    const { overview, turnNumber, currentAffiliation, squaddieAffiliations } = baseRenderInfo(engine)
 
     const renderInfo: MapRenderInfo = {
         turnNumber,

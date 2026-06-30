@@ -47,6 +47,7 @@ export const SimpleTestMissionIds = {
         blessingActionId: "lini-blessing",
         healActionId: "lini-heal",
         solarSphereActionId: "lini-solar-sphere",
+        limitedBlastActionId: "lini-limited-blast",
     },
     enemy: {
         outOfBattleSquaddieId: "slither-demon",
@@ -204,6 +205,7 @@ function createSimpleSquaddieActionManager(): SquaddieActionManager {
     manager.addOrUpdate(createBlessingAction())
     manager.addOrUpdate(createHealAction())
     manager.addOrUpdate(createSolarSphereAction())
+    manager.addOrUpdate(createLimitedBlastAction())
     manager.addOrUpdate(createClawAction())
     manager.addOrUpdate(SquaddieActionService.defaultMove())
     manager.addOrUpdate(SquaddieActionService.defaultEndTurn())
@@ -239,6 +241,7 @@ function createSimpleOutOfBattleSquaddieManager(): OutOfBattleSquaddieManager {
             SimpleTestMissionIds.player.blessingActionId,
             SimpleTestMissionIds.player.healActionId,
             SimpleTestMissionIds.player.solarSphereActionId,
+            SimpleTestMissionIds.player.limitedBlastActionId,
         ],
         affiliation: SquaddieAffiliation.PLAYER,
     })
@@ -492,6 +495,39 @@ function createSolarSphereAction(): SquaddieAction {
                     ],
                 },
             }
+        },
+    })
+}
+
+function createLimitedBlastAction(): SquaddieAction {
+    return SquaddieActionService.new({
+        id: SimpleTestMissionIds.player.limitedBlastActionId,
+        name: "Limited Blast",
+        usesPerTurn: 1,
+        range: ActionRange.MELEE,
+        shape: CoordinateGeneratorShape.BLOOM,
+        affiliationRelationship: {
+            self: true,
+            foe: false,
+            friend: false,
+        },
+        effectOnActor: {
+            [DegreeOfSuccess.SUCCESS]: {
+                actionPoints: { spent: 1 },
+            },
+        },
+        effectOnTarget: {
+            [DegreeOfSuccess.SUCCESS]: {
+                conditions: {
+                    add: [
+                        SquaddieConditionService.new({
+                            type: SquaddieConditionType.ARMOR,
+                            amount: { amount: 1 },
+                            source: SquaddieConditionSource.SPIRITUAL,
+                        }),
+                    ],
+                },
+            },
         },
     })
 }

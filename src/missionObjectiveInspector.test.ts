@@ -124,6 +124,34 @@ describe("MissionObjectiveInspector", () => {
             expect(result).not.toContain("Objective:")
             expect(result).toContain("Failure:")
         })
+
+        it("formats SQUADDIES_INJURED description under Objective header", () => {
+            const entries: MissionObjectiveDisplayEntry[] = [
+                {
+                    description: "Injure: slither-demon-v2",
+                    isCompleted: false,
+                    isFailureCondition: false,
+                },
+            ]
+
+            const result = MissionObjectiveInspector.formatEntries(entries)
+            expect(result).toContain("Objective:")
+            expect(result).toContain("- Injure: slither-demon-v2")
+        })
+
+        it("formats SPECIFIC_SQUADDIES_DEFEATED description under Objective header", () => {
+            const entries: MissionObjectiveDisplayEntry[] = [
+                {
+                    description: "Defeat specific: slither-demon-v2",
+                    isCompleted: false,
+                    isFailureCondition: false,
+                },
+            ]
+
+            const result = MissionObjectiveInspector.formatEntries(entries)
+            expect(result).toContain("Objective:")
+            expect(result).toContain("- Defeat specific: slither-demon-v2")
+        })
     })
 
     describe("integration with test harness", () => {

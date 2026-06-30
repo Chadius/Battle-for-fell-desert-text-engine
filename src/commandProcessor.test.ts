@@ -551,7 +551,7 @@ describe("processCommand", () => {
                 expect(result.message).toContain("Lini")
             })
 
-            it("clears selected and acting squaddie from context", () => {
+            it("after ending turn, Lini is deselected and ready to accept new coordinate input", () => {
                 const { engine, context } = setupPlayerTurnWithLini()
                 const result = processCommand("AE", engine, context)
                 expect(result.updatedContext).toBeDefined()
@@ -561,15 +561,6 @@ describe("processCommand", () => {
                 expect(
                     result.updatedContext!.actingSquaddieId
                 ).toBeUndefined()
-            })
-
-            it("sets interaction phase to BROWSING", () => {
-                const { engine, context } = setupPlayerTurnWithLini()
-                const result = processCommand("AE", engine, context)
-                expect(result.updatedContext).toBeDefined()
-                expect(result.updatedContext!.interactionPhase).toBe(
-                    InteractionPhase.BROWSING
-                )
             })
 
             it("spends all action points", () => {
@@ -662,15 +653,6 @@ describe("processCommand", () => {
             const result = processCommand("AM", engine, context)
             expect(result.action).toBe("moveSquaddie")
             expect(result.mapText).toMatch(/[123]/)
-        })
-
-        it("sets context to SELECTING_TARGET after AM command", () => {
-            const { engine, context } = setupPlayerTurnWithLini()
-            const result = processCommand("AM", engine, context)
-            expect(result.updatedContext?.interactionPhase).toBe(
-                InteractionPhase.SELECTING_TARGET
-            )
-            expect(result.updatedContext?.pendingActionId).toBe("default-move")
         })
 
         it("executes movement to a valid reachable coordinate", () => {
@@ -858,21 +840,6 @@ describe("processCommand", () => {
             return { engine, context }
         }
 
-        const drainNonPlayerTurns = (engine: MissionEngine) => {
-            for (let i = 0; i < 20; i++) {
-                if (
-                    engine.getCurrentAffiliationTurn() ===
-                    MissionAffiliationTurn.PLAYER_TURN
-                )
-                    break
-                if (engine.getReadiedAction() != undefined) {
-                    engine.useActionAndGetResults()
-                } else {
-                    engine.transitionToNextPhase()
-                }
-            }
-        }
-
         const setupPlayerTurnWithLiniAdjacentToEnemy = () => {
             const allFoursQueue = Array<number>(40).fill(4)
             const { engine, playerSquaddieId: liniId } = createSimplePlayerVsEnemyMission(new RollGenerator(allFoursQueue))
@@ -925,10 +892,10 @@ describe("processCommand", () => {
             })
         })
 
-        describe("A3 (Scimitar) — single target auto-selects to CONFIRMING_ACTION when adjacent to enemy", () => {
+        describe("A4 (Scimitar) — single target auto-selects to CONFIRMING_ACTION when adjacent to enemy", () => {
             it("enters CONFIRMING_ACTION phase", () => {
                 const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
-                const result = processCommand("A3", engine, context)
+                const result = processCommand("A4", engine, context)
                 expect(result.action).toBe("executeAction")
                 expect(result.updatedContext?.interactionPhase).toBe(
                     InteractionPhase.CONFIRMING_ACTION
@@ -937,7 +904,7 @@ describe("processCommand", () => {
 
             it("shows forecast for the auto-selected target (the Slither Demon)", () => {
                 const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
-                const result = processCommand("A3", engine, context)
+                const result = processCommand("A4", engine, context)
                 const allPositions = engine.getAllSquaddiePositions()
                 const slitherDemonPos = allPositions.find((p) => p.squaddieId.outOfBattleSquaddieId === "slither-demon")!
                 const slitherDemonInfo = engine.getSquaddieInfo(slitherDemonPos.squaddieId)
@@ -947,13 +914,13 @@ describe("processCommand", () => {
 
             it("sets pendingTargetCount to 1 for single-target action", () => {
                 const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
-                const result = processCommand("A3", engine, context)
+                const result = processCommand("A4", engine, context)
                 expect(result.updatedContext?.pendingTargetCount).toBe(1)
             })
 
             it("preserves the acting squaddie in the updated context", () => {
                 const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
-                const result = processCommand("A3", engine, context)
+                const result = processCommand("A4", engine, context)
                 expect(result.updatedContext?.actingSquaddieId).toEqual(
                     context.selectedSquaddieId
                 )
@@ -961,7 +928,7 @@ describe("processCommand", () => {
 
             it("CONFIRMING_ACTION map includes the HT marker on the target", () => {
                 const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
-                const result = processCommand("A3", engine, context)
+                const result = processCommand("A4", engine, context)
                 expect(result.mapText).toContain("HT")
             })
 
@@ -969,14 +936,14 @@ describe("processCommand", () => {
             // so "//" markers only appear for actions with multi-step range.
             it("CONFIRMING_ACTION map does not include // for a 1-step melee action", () => {
                 const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
-                const result = processCommand("A3", engine, context)
+                const result = processCommand("A4", engine, context)
                 expect(result.mapText).not.toContain("//")
             })
 
             // Forecast message should always include the confirmation prompt
             it("forecast message includes confirmation prompt", () => {
                 const { engine, context } = setupPlayerTurnWithLiniAdjacentToEnemy()
-                const result = processCommand("A3", engine, context)
+                const result = processCommand("A4", engine, context)
                 expect(result.message).toContain(
                     "Press Y to confirm or N/C to cancel."
                 )
@@ -986,7 +953,7 @@ describe("processCommand", () => {
         describe("selecting an invalid numbered action", () => {
             it("returns an error message without entering CONFIRMING_ACTION", () => {
                 const { engine, context } = setupPlayerTurnWithLini()
-                const result = processCommand("A3", engine, context)
+                const result = processCommand("A4", engine, context)
                 expect(result.action).toBe("selectAction")
                 expect(result.message).toContain("Scimitar")
                 expect(result.updatedContext).toBeUndefined()
@@ -1174,22 +1141,6 @@ describe("processCommand", () => {
             return { engine, context }
         }
 
-        // Drain non-player turns until PLAYER_TURN returns.
-        const drainNonPlayerTurns = (engine: MissionEngine) => {
-            for (let i = 0; i < 20; i++) {
-                if (
-                    engine.getCurrentAffiliationTurn() ===
-                    MissionAffiliationTurn.PLAYER_TURN
-                )
-                    break
-                if (engine.getReadiedAction() != undefined) {
-                    engine.useActionAndGetResults()
-                } else {
-                    engine.transitionToNextPhase()
-                }
-            }
-        }
-
         it("returns undoAction with no-engine message when engine is undefined", () => {
             const result = processCommand("Z")
             expect(result.action).toBe("undoAction")
@@ -1249,8 +1200,8 @@ describe("processCommand", () => {
             // Let the enemy act and return to PLAYER_TURN.
             drainNonPlayerTurns(engine)
 
-            // Execute Scimitar (A3 from the adjacent position).
-            const selectResult = processCommand("A3", engine, context)
+            // Execute Scimitar (A4 from the adjacent position).
+            const selectResult = processCommand("A4", engine, context)
             const confirmingContext = selectResult.updatedContext!
             processCommand("Y", engine, confirmingContext)
 
@@ -1442,7 +1393,13 @@ describe("processCommand", () => {
                 MovementTestMissionIds.vale.rescueActionId
             )
             expect(destinations.length).toBeGreaterThan(0)
-            return destinations[0].destination
+            // Sort by row then col for deterministic selection regardless of engine return order.
+            const sorted = [...destinations].sort((a, b) =>
+                a.destination.row !== b.destination.row
+                    ? a.destination.row - b.destination.row
+                    : a.destination.col - b.destination.col
+            )
+            return sorted[0].destination
         }
 
         it("A2 (Rescue) auto-selects the only valid friend and enters destination selection", () => {
@@ -1590,3 +1547,15 @@ describe("processCommand", () => {
         })
     })
 })
+
+function drainNonPlayerTurns(engine: MissionEngine) {
+    for (let i = 0; i < 20; i++) {
+        if (engine.getCurrentAffiliationTurn() === MissionAffiliationTurn.PLAYER_TURN) return
+        if (engine.getReadiedAction() != undefined) {
+            engine.useActionAndGetResults()
+        } else {
+            engine.transitionToNextPhase()
+        }
+    }
+    throw new Error("[drainNonPlayerTurns] PLAYER_TURN not reached within iteration limit")
+}

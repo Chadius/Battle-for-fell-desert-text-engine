@@ -20,6 +20,7 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
-    "terminal-kit": "^3.1.2"
+    "terminal-kit": "^3.1.2",
+    "zod": "^4.4.3"
   }
 }
