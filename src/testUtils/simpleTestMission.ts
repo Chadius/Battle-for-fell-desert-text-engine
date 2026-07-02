@@ -300,7 +300,7 @@ function createSimpleMissionObjectives(): MissionObjective[] {
         id: "cli-simple-defeat-all-enemies",
         rewards: [MissionObjectiveRewardService.newMissionEndsReward()],
         criteria: [
-            MissionObjectiveCriteriaService.newSquaddiesDefeatedCriteria({
+            MissionObjectiveCriteriaService.newAllSquaddiesDefeatedCriteria({
                 affiliations: [SquaddieAffiliation.ENEMY],
             }),
         ],
@@ -310,7 +310,7 @@ function createSimpleMissionObjectives(): MissionObjective[] {
         id: "cli-simple-defeat-all-players",
         rewards: [MissionObjectiveRewardService.newMissionFailureReward()],
         criteria: [
-            MissionObjectiveCriteriaService.newSquaddiesDefeatedCriteria({
+            MissionObjectiveCriteriaService.newAllSquaddiesDefeatedCriteria({
                 affiliations: [SquaddieAffiliation.PLAYER],
             }),
         ],
@@ -749,7 +749,7 @@ function createLineMissionObjectives(): MissionObjective[] {
         id: "cli-line-defeat-all-enemies",
         rewards: [MissionObjectiveRewardService.newMissionEndsReward()],
         criteria: [
-            MissionObjectiveCriteriaService.newSquaddiesDefeatedCriteria({
+            MissionObjectiveCriteriaService.newAllSquaddiesDefeatedCriteria({
                 affiliations: [SquaddieAffiliation.ENEMY],
             }),
         ],
@@ -759,7 +759,7 @@ function createLineMissionObjectives(): MissionObjective[] {
         id: "cli-line-defeat-all-players",
         rewards: [MissionObjectiveRewardService.newMissionFailureReward()],
         criteria: [
-            MissionObjectiveCriteriaService.newSquaddiesDefeatedCriteria({
+            MissionObjectiveCriteriaService.newAllSquaddiesDefeatedCriteria({
                 affiliations: [SquaddieAffiliation.PLAYER],
             }),
         ],

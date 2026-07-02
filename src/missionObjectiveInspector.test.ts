@@ -5,7 +5,7 @@ import type { MissionObjectiveDisplayEntry } from "./missionObjectiveInspector.j
 
 describe("MissionObjectiveInspector", () => {
     describe("gatherEntries", () => {
-        it("identifies non-failure objectives from SQUADDIES_DEFEATED criteria with ENEMY affiliation", () => {
+        it("identifies non-failure objectives from ALL_SQUADDIES_DEFEATED criteria with ENEMY affiliation", () => {
             const engine = new MissionEngineTestHarness()
             const entries = MissionObjectiveInspector.gatherEntries(engine)
 
@@ -19,7 +19,7 @@ describe("MissionObjectiveInspector", () => {
             expect(defeatEnemyEntry!.isCompleted).toBe(false)
         })
 
-        it("identifies failure objectives from SQUADDIES_DEFEATED criteria with PLAYER affiliation", () => {
+        it("identifies failure objectives from ALL_SQUADDIES_DEFEATED criteria with PLAYER affiliation", () => {
             const engine = new MissionEngineTestHarness()
             const entries = MissionObjectiveInspector.gatherEntries(engine)
 
@@ -125,7 +125,7 @@ describe("MissionObjectiveInspector", () => {
             expect(result).toContain("Failure:")
         })
 
-        it("formats SQUADDIES_INJURED description under Objective header", () => {
+        it("formats SPECIFIC_SQUADDIES_INJURED description under Objective header", () => {
             const entries: MissionObjectiveDisplayEntry[] = [
                 {
                     description: "Injure: slither-demon-v2",

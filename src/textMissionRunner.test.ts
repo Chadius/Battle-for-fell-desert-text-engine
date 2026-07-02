@@ -451,7 +451,7 @@ const makeRunnerWithVictoryMovieObjective = (
             id: "play-victory-movie",
             rewards: [MissionObjectiveRewardService.newPlayMovieReward("test-movie")],
             criteria: [
-                MissionObjectiveCriteriaService.newSquaddiesDefeatedCriteria({
+                MissionObjectiveCriteriaService.newAllSquaddiesDefeatedCriteria({
                     affiliations: [SquaddieAffiliation.ENEMY],
                 }),
             ],

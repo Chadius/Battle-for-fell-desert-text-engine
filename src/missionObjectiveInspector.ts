@@ -3,8 +3,8 @@ import type { MissionObjective } from "../logic/src/mission/missionObjective.js"
 import { MissionObjectiveRewardType } from "../logic/src/mission/missionObjectiveReward.js"
 import { MissionObjectiveCriteriaType } from "../logic/src/mission/missionObjectiveCriteria.js"
 import type {
-    SquaddiesDefeatedCriteria,
-    SquaddiesInjuredCriteria,
+    AllSquaddiesDefeatedCriteria,
+    SpecificSquaddiesInjuredCriteria,
     SpecificSquaddiesDefeatedCriteria,
 } from "../logic/src/mission/missionObjectiveCriteria.js"
 import {
@@ -56,7 +56,7 @@ const findSquaddieNamesByAffiliation = (
 
 const buildCriteriaDescription = (
     engine: MissionEngine,
-    criteria: SquaddiesDefeatedCriteria
+    criteria: AllSquaddiesDefeatedCriteria
 ): string => {
     if (criteria.affiliations != undefined && criteria.affiliations.size > 0) {
         const firstAffiliation = [...criteria.affiliations][0]
@@ -80,7 +80,7 @@ const buildCriteriaDescription = (
 }
 
 const injuredCriteriaDescription = (
-    criteria: SquaddiesInjuredCriteria
+    criteria: SpecificSquaddiesInjuredCriteria
 ): string => {
     const ids = [...(criteria.outOfBattleSquaddieIds ?? [])]
     return ids.length > 0 ? `Injure: ${ids.join(", ")}` : "Injure a squaddie"
@@ -101,10 +101,10 @@ const objectiveToEntry = (
     const descriptions: string[] = []
 
     for (const criterion of objective.criteria) {
-        if (criterion.type === MissionObjectiveCriteriaType.SQUADDIES_DEFEATED) {
+        if (criterion.type === MissionObjectiveCriteriaType.ALL_SQUADDIES_DEFEATED) {
             descriptions.push(buildCriteriaDescription(engine, criterion))
         }
-        if (criterion.type === MissionObjectiveCriteriaType.SQUADDIES_INJURED) {
+        if (criterion.type === MissionObjectiveCriteriaType.SPECIFIC_SQUADDIES_INJURED) {
             descriptions.push(injuredCriteriaDescription(criterion))
         }
         if (criterion.type === MissionObjectiveCriteriaType.SPECIFIC_SQUADDIES_DEFEATED) {
