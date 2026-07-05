@@ -31,6 +31,13 @@ export const isFailureObjective = (objective: MissionObjective): boolean => {
     )
 }
 
+export const isObjectiveVisible = (
+    objective: MissionObjective,
+    revealHiddenMissionObjectives: boolean
+): boolean => {
+    return revealHiddenMissionObjectives || objective.hidden !== true
+}
+
 const findSquaddieNamesByAffiliation = (
     engine: MissionEngine,
     affiliations: Set<TSquaddieAffiliation>
@@ -123,20 +130,32 @@ const gatherEntries = (
     engine: MissionEngine
 ): MissionObjectiveDisplayEntry[] => {
     const entries: MissionObjectiveDisplayEntry[] = []
+    const revealHiddenMissionObjectives =
+        engine.getDebugFlags()?.revealHiddenMissionObjectives === true
 
-    const inProgress = engine.getInProgressMissionObjectives()
+    const inProgress = engine
+        .getInProgressMissionObjectives()
+        .filter((objective) =>
+            isObjectiveVisible(objective, revealHiddenMissionObjectives)
+        )
     for (const objective of inProgress) {
         entries.push(objectiveToEntry(engine, objective, false))
     }
 
-    const completedNotRewarded =
-        engine.getCompletedButNotRewardedMissionObjectives()
+    const completedNotRewarded = engine
+        .getCompletedButNotRewardedMissionObjectives()
+        .filter((objective) =>
+            isObjectiveVisible(objective, revealHiddenMissionObjectives)
+        )
     for (const objective of completedNotRewarded) {
         entries.push(objectiveToEntry(engine, objective, true))
     }
 
-    const completedAndRewarded =
-        engine.getCompletedAndRewardedMissionObjectives()
+    const completedAndRewarded = engine
+        .getCompletedAndRewardedMissionObjectives()
+        .filter((objective) =>
+            isObjectiveVisible(objective, revealHiddenMissionObjectives)
+        )
     for (const objective of completedAndRewarded) {
         entries.push(objectiveToEntry(engine, objective, true))
     }

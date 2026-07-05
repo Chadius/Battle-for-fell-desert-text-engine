@@ -1,7 +1,22 @@
 import { describe, it, expect } from "vitest"
-import { MissionObjectiveInspector } from "./missionObjectiveInspector.js"
+import { isObjectiveVisible, MissionObjectiveInspector } from "./missionObjectiveInspector.js"
 import { MissionEngineTestHarness } from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
 import type { MissionObjectiveDisplayEntry } from "./missionObjectiveInspector.js"
+import { MissionObjectiveService } from "../logic/src/mission/missionObjective.js"
+import { MissionObjectiveRewardService } from "../logic/src/mission/missionObjectiveReward.js"
+import { MissionObjectiveCriteriaService } from "../logic/src/mission/missionObjectiveCriteria.js"
+
+const newObjective = (hidden?: boolean) =>
+    MissionObjectiveService.new({
+        id: "test-objective",
+        rewards: [MissionObjectiveRewardService.newMissionEndsReward()],
+        criteria: [
+            MissionObjectiveCriteriaService.newSpecificSquaddiesDefeatedCriteria(
+                { outOfBattleSquaddieIds: ["target"] }
+            ),
+        ],
+        hidden,
+    })
 
 describe("MissionObjectiveInspector", () => {
     describe("gatherEntries", () => {
@@ -31,6 +46,33 @@ describe("MissionObjectiveInspector", () => {
             expect(defeatPlayerEntry!.description).toContain("lini")
             expect(defeatPlayerEntry!.isFailureCondition).toBe(true)
             expect(defeatPlayerEntry!.isCompleted).toBe(false)
+        })
+
+        it("still shows ordinary (non-hidden) objectives when revealHiddenMissionObjectives is on", () => {
+            const engine = new MissionEngineTestHarness()
+            engine.setDebugFlag("revealHiddenMissionObjectives", true)
+            const entries = MissionObjectiveInspector.gatherEntries(engine)
+
+            expect(
+                entries.some((e) => e.description.includes("slither-demon"))
+            ).toBe(true)
+        })
+    })
+
+    describe("isObjectiveVisible", () => {
+        it("hides a hidden objective when revealHiddenMissionObjectives is off", () => {
+            expect(isObjectiveVisible(newObjective(true), false)).toBe(false)
+        })
+
+        it("shows a hidden objective when revealHiddenMissionObjectives is on", () => {
+            expect(isObjectiveVisible(newObjective(true), true)).toBe(true)
+        })
+
+        it("shows a non-hidden objective regardless of the debug flag", () => {
+            expect(isObjectiveVisible(newObjective(false), false)).toBe(true)
+            expect(isObjectiveVisible(newObjective(undefined), false)).toBe(
+                true
+            )
         })
     })
 

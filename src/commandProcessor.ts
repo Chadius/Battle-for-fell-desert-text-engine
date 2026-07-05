@@ -18,7 +18,10 @@ import {CoordinateCalculator} from "../logic/src/coordinateMap/coordinateCalcula
 
 // Ordered list of all known debug flags. Index 1-based maps to DS <n> commands.
 // Append new flags here as they are added to DebugFlags.
-export const DEBUG_FLAG_NAMES: (keyof DebugFlags)[] = ["enemyAlwaysEndsTheirTurn"]
+export const DEBUG_FLAG_NAMES: (keyof DebugFlags)[] = [
+    "enemyAlwaysEndsTheirTurn",
+    "revealHiddenMissionObjectives",
+]
 
 export const InteractionPhase = {
     BROWSING: "BROWSING",

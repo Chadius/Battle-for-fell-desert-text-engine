@@ -1525,6 +1525,15 @@ describe("processCommand", () => {
                 expect(result.message).toContain("enemyAlwaysEndsTheirTurn: OFF")
             })
 
+            it("toggles revealHiddenMissionObjectives from OFF to ON", () => {
+                const engine = createEngine()
+                const result = processCommand("DS 2", engine)
+                expect(result.action).toBe("setDebugFlag")
+                expect(result.message).toContain(
+                    "revealHiddenMissionObjectives: ON"
+                )
+            })
+
             it("returns an error for an out-of-range flag number", () => {
                 const engine = createEngine()
                 const result = processCommand("DS 99", engine)
