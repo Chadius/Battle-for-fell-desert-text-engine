@@ -18,6 +18,7 @@ import {
     createMovementMissionEngine,
     MovementTestMissionIds,
 } from "./testUtils/movementTestMission.js"
+import { ChallengeModifierType } from "../logic/src/squaddieAction/calculate/challengeModifier/challengeModifierSetting.js"
 
 describe("processCommand", () => {
     describe("quit action", () => {
@@ -824,6 +825,24 @@ describe("processCommand", () => {
             transitionToNextPhase(engine)
             const result = processCommand("P", engine)
             expect(result.message).toBe("Turn 0 - Player Turn")
+        })
+
+        it("does not mention challenge modifiers when none are enabled", () => {
+            const { engine } = createSimplePlayerVsEnemyMission()
+            const result = processCommand("P", engine)
+            expect(result.message).not.toContain("Training Wheels")
+        })
+
+        it("shows an enabled challenge modifier", () => {
+            const { engine } = createSimplePlayerVsEnemyMission()
+            engine.setChallengeModifier(
+                ChallengeModifierType.TRAINING_WHEELS,
+                true
+            )
+            const result = processCommand("P", engine)
+            expect(result.message).toBe(
+                "Turn 0 - Turn Start\nTraining Wheels: ON"
+            )
         })
     })
 

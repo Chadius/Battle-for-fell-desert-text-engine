@@ -15,6 +15,8 @@ import {MovementInspector,} from "./movementInspector.js"
 import {ActionResultInspector} from "./actionResultInspector.js"
 import {OffsetCoordinate} from "../logic/src/coordinateMap/offsetCoordinate.js";
 import {CoordinateCalculator} from "../logic/src/coordinateMap/coordinateCalculator.js";
+import {ChallengeModifierInspector} from "./challengeModifierInspector.js"
+import {humanizeEnumName} from "./stringFormat.js"
 
 // Ordered list of all known debug flags. Index 1-based maps to DS <n> commands.
 // Append new flags here as they are added to DebugFlags.
@@ -162,7 +164,7 @@ const handleShowCommands = (context?: CommandContext, engine?: MissionEngine): C
         "M - Show the map",
         "O - Show objectives",
         "W - Who can act this phase?",
-        "P - Show current phase",
+        "P - Show current phase (and any active challenge modifiers)",
         "row, col - Inspect a coordinate",
     ]
 
@@ -1415,13 +1417,6 @@ export const transitionToNextPhase = (
     return engine.getCurrentAffiliationTurn()
 }
 
-const formatPhaseName = (phase: TMissionAffiliationTurn): string => {
-    return phase
-        .split("_")
-        .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
-        .join(" ")
-}
-
 const handleShowPhase = (engine?: MissionEngine): CommandResult => {
     if (engine == undefined) {
         return {
@@ -1431,8 +1426,12 @@ const handleShowPhase = (engine?: MissionEngine): CommandResult => {
     }
     const phase = engine.getCurrentAffiliationTurn()
     const turnNumber = engine.getCurrentTurnNumber()
+    const lines = [
+        `Turn ${turnNumber} - ${humanizeEnumName(phase)}`,
+        ...ChallengeModifierInspector.activeModifierLines(engine),
+    ]
     return {
         action: "showPhase",
-        message: `Turn ${turnNumber} - ${formatPhaseName(phase)}`,
+        message: lines.join("\n"),
     }
 }
