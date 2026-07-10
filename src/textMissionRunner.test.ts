@@ -16,6 +16,7 @@ import { MovieSceneImageService } from "../logic/src/movie/movieSceneImage.js"
 import { MissionObjectiveService } from "../logic/src/mission/missionObjective.js"
 import { MissionObjectiveRewardService } from "../logic/src/mission/missionObjectiveReward.js"
 import { MissionObjectiveCriteriaService } from "../logic/src/mission/missionObjectiveCriteria.js"
+import { MissionAffiliationTurn } from "../logic/src/mission/missionTurn.js"
 import { SquaddieAffiliation } from "../logic/src/affiliation/affiliation.js"
 import { ResourceManifestEntryService } from "../logic/src/resource/resourceManifest.js"
 import { ResourceManifestCollectionService } from "../logic/src/resource/resourceManifestCollection.js"
@@ -237,14 +238,29 @@ describe("TextMissionRunner", () => {
             })
         })
 
+        describe("when a PLAY_MOVIE reward is triggered by a PHASE_REACHED objective already satisfied at construction", () => {
+            it("shows the movie instead of silently skipping past it during phase advancement", () => {
+                const { runner } = makeRunnerWithPhaseReachedMovieObjective("Intro speech")
+
+                expect(runner.getWelcomeText()).toContain("Intro speech")
+            })
+
+            it("holds off on the objectives list until the movie finishes", () => {
+                const { runner } = makeRunnerWithPhaseReachedMovieObjective("Intro speech")
+
+                expect(runner.getWelcomeText()).not.toContain("Objective:")
+            })
+        })
+
         describe("when a movie is playing", () => {
-            it("shows the movie scene prompt when a game command is sent during movie playback", () => {
+            it("flags unrecognised input as invalid and re-shows the scene prompt", () => {
                 const engine = new MissionEngineTestHarness()
                 const runner = new TextMissionRunner(engine)
                 engine.playMovie(makeImageMovie(), [])
 
-                const result = runner.processInput("M")
+                const result = runner.processInput("0, 0")
 
+                expect(result.text).toContain(`"0, 0" is not a valid command while a movie is playing.`)
                 expect(result.text).toContain("[Enter/N to continue, S to stop movie]")
             })
 
@@ -453,6 +469,29 @@ const makeRunnerWithVictoryMovieObjective = (
             criteria: [
                 MissionObjectiveCriteriaService.newAllSquaddiesDefeatedCriteria({
                     affiliations: [SquaddieAffiliation.ENEMY],
+                }),
+            ],
+        })
+    )
+    return { runner: new TextMissionRunner(engine), engine }
+}
+
+// Registers a PLAY_MOVIE objective tied to a PHASE_REACHED criteria already satisfied at the
+// mission's starting turn/phase, and returns the configured engine and runner.
+const makeRunnerWithPhaseReachedMovieObjective = (
+    dialogLine: string
+): { runner: TextMissionRunner; engine: MissionEngineTestHarness } => {
+    const movie = makeConversationMovie([dialogLine])
+    const engine = new MissionEngineTestHarness()
+    engine.registerMovie(movie)
+    engine.addObjective(
+        MissionObjectiveService.new({
+            id: "intro-speech",
+            rewards: [MissionObjectiveRewardService.newPlayMovieReward("test-movie")],
+            criteria: [
+                MissionObjectiveCriteriaService.newPhaseReachedCriteria({
+                    turnCount: 0,
+                    missionAffiliationTurn: MissionAffiliationTurn.TURN_START,
                 }),
             ],
         })

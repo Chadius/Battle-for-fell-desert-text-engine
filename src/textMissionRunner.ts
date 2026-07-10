@@ -61,10 +61,16 @@ export class TextMissionRunner {
             lines.push("", ...this.initialPhaseMessages)
         }
 
-        const objectiveEntries = MissionObjectiveInspector.gatherEntries(this.engine)
-        const objectivesDisplay = MissionObjectiveInspector.formatEntries(objectiveEntries)
-        if (objectivesDisplay.length > 0) {
-            lines.push("", objectivesDisplay)
+        // A PLAY_MOVIE reward may have fired while advancing through the mission's opening phases.
+        // Hold off on the objectives list until the movie finishes so the two aren't shown together.
+        if (this.engine.isMoviePlaying()) {
+            lines.push("", this.currentSceneText())
+        } else {
+            const objectiveEntries = MissionObjectiveInspector.gatherEntries(this.engine)
+            const objectivesDisplay = MissionObjectiveInspector.formatEntries(objectiveEntries)
+            if (objectivesDisplay.length > 0) {
+                lines.push("", objectivesDisplay)
+            }
         }
 
         return lines.join("\n")
@@ -128,9 +134,14 @@ export class TextMissionRunner {
             return this.missionEndResultOrContinue()
         }
 
-        if (command != undefined) {
-            this.engine.processMovieCommand(command)
+        if (command == undefined) {
+            return {
+                text: `"${input}" is not a valid command while a movie is playing.\n${this.currentSceneText()}`,
+                shouldQuit: false,
+            }
         }
+
+        this.engine.processMovieCommand(command)
 
         if (this.engine.isMoviePlaying()) {
             return { text: this.currentSceneText(), shouldQuit: false }
@@ -288,6 +299,12 @@ export class TextMissionRunner {
         return interactivePhases.includes(phase)
     }
 
+    // True when a PLAY_MOVIE reward fired mid-advancement; advancing loops should stop
+    // immediately so the movie is shown instead of being skipped over.
+    private shouldPauseAdvancementForMovie(): boolean {
+        return this.engine.isMoviePlaying()
+    }
+
     // Loop until reaching a human-controlled interactive phase, auto-processing
     // AI-controlled phases (e.g. ENEMY_TURN) along the way.
     private advanceToInteractivePhase(): string[] {
@@ -296,6 +313,10 @@ export class TextMissionRunner {
         let aiIterations = 0
 
         while (true) {
+            if (this.shouldPauseAdvancementForMovie()) {
+                break
+            }
+
             const currentPhase = this.engine.getCurrentAffiliationTurn()
 
             if (!this.isInteractivePhase(currentPhase)) {
@@ -374,6 +395,10 @@ export class TextMissionRunner {
             const transitionResults = this.engine.transitionToNextPhase()
             messages.push(...this.formatConditionExpirationMessages(transitionResults))
             const phaseAfter = this.engine.getCurrentAffiliationTurn()
+
+            if (this.shouldPauseAdvancementForMovie()) {
+                break
+            }
 
             if (phaseAfter === phaseBefore) {
                 break
