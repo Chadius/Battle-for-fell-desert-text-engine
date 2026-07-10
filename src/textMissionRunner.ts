@@ -21,7 +21,7 @@ import { baseRenderInfo } from "./mapDataGatherer.js"
 import { EnemyAI } from "./enemyAI.js"
 import type { MissionObjective } from "../logic/src/mission/missionObjective.js"
 
-const MAX_PHASE_TRANSITIONS = 20
+const MAX_ADVANCEMENT_STEPS = 30
 
 export interface ProcessInputResult {
     text: string
@@ -306,45 +306,46 @@ export class TextMissionRunner {
     }
 
     // Loop until reaching a human-controlled interactive phase, auto-processing
-    // AI-controlled phases (e.g. ENEMY_TURN) along the way.
+    // AI-controlled phases (e.g. ENEMY_TURN) along the way. Each iteration performs exactly
+    // one atomic step (a single phase transition or a single AI action) and then evaluates
+    // every stop condition — including the movie-pause check — in this one place, so a
+    // PLAY_MOVIE reward can never be advanced past regardless of which step triggered it.
     private advanceToInteractivePhase(): string[] {
         const allMessages: string[] = []
-        const MAX_AI_ITERATIONS = 10
-        let aiIterations = 0
+        let stepCount = 0
 
         while (true) {
+            const currentPhase = this.engine.getCurrentAffiliationTurn()
+            const isInteractive = this.isInteractivePhase(currentPhase)
+
+            if (isInteractive) {
+                allMessages.push(...this.announceRecentTransitions(currentPhase))
+            }
+
             if (this.shouldPauseAdvancementForMovie()) {
                 break
             }
 
-            const currentPhase = this.engine.getCurrentAffiliationTurn()
-
-            if (!this.isInteractivePhase(currentPhase)) {
-                // Advance through non-interactive bookend phases (START/END)
-                allMessages.push(...this.advanceToInteractivePhaseManually())
-                continue
-            }
-
-            if (currentPhase === MissionAffiliationTurn.ENEMY_TURN) {
-                allMessages.push(...this.announceRecentTransitions(currentPhase))
-                const readiedAction = this.engine.getReadiedAction()
-                if (readiedAction != undefined) {
-                    allMessages.push(...this.processEnemySquaddies())
-                    aiIterations += 1
-                    if (aiIterations >= MAX_AI_ITERATIONS) {
-                        throw new Error(
-                            "AI processed too many turns without advancing — possible loop"
-                        )
-                    }
-                    continue
-                }
-                // No readied action — engine already auto-advanced past this turn
+            if (!isInteractive) {
+                // Advance through a single non-interactive bookend phase (START/END)
+                allMessages.push(...this.stepToNextPhase())
+            } else if (
+                currentPhase === MissionAffiliationTurn.ENEMY_TURN &&
+                this.engine.getReadiedAction() != undefined
+            ) {
+                allMessages.push(...this.processEnemySquaddies())
+            } else {
+                // Human-controlled interactive phase, or an enemy phase with no more
+                // readied actions (engine already auto-advanced past this turn) — stop.
                 break
             }
 
-            // Human-controlled interactive phase — stop and wait for input
-            allMessages.push(...this.announceRecentTransitions(currentPhase))
-            break
+            stepCount += 1
+            if (stepCount >= MAX_ADVANCEMENT_STEPS) {
+                throw new Error(
+                    "[TextMissionRunner.advanceToInteractivePhase] Advanced too many steps without settling — possible infinite loop"
+                )
+            }
         }
 
         return allMessages
@@ -379,46 +380,21 @@ export class TextMissionRunner {
         return messages
     }
 
-    private advanceToInteractivePhaseManually(): string[] {
+    // Executes a single phase transition. Announces the departing phase if it's a bookend
+    // (e.g. TURN_START/TURN_END) — the arriving phase is announced by announceRecentTransitions()
+    // once the loop in advanceToInteractivePhase() re-reads the current phase on its next iteration.
+    private stepToNextPhase(): string[] {
         const messages: string[] = []
 
-        const currentAnnouncement = this.announcePhase(
+        const departingPhaseAnnouncement = this.announcePhase(
             this.engine.getCurrentAffiliationTurn()
         )
-        if (currentAnnouncement != undefined) {
-            messages.push(currentAnnouncement)
+        if (departingPhaseAnnouncement != undefined) {
+            messages.push(departingPhaseAnnouncement)
         }
 
-        let phaseChangeLimit = MAX_PHASE_TRANSITIONS
-        while (phaseChangeLimit > 0) {
-            const phaseBefore = this.engine.getCurrentAffiliationTurn()
-            const transitionResults = this.engine.transitionToNextPhase()
-            messages.push(...this.formatConditionExpirationMessages(transitionResults))
-            const phaseAfter = this.engine.getCurrentAffiliationTurn()
-
-            if (this.shouldPauseAdvancementForMovie()) {
-                break
-            }
-
-            if (phaseAfter === phaseBefore) {
-                break
-            }
-
-            const announcement = this.announcePhase(phaseAfter)
-            if (announcement != undefined) {
-                messages.push(announcement)
-            }
-
-            if (this.isInteractivePhase(phaseAfter)) {
-                this.lastKnownInteractivePhase = phaseAfter
-                break
-            }
-            phaseChangeLimit -= 1
-        }
-
-        if (phaseChangeLimit <= 0) {
-            throw new Error("Changed phases too many times, possible infinite loop")
-        }
+        const transitionResults = this.engine.transitionToNextPhase()
+        messages.push(...this.formatConditionExpirationMessages(transitionResults))
 
         return messages
     }
