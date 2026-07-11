@@ -590,6 +590,7 @@ describe("squaddieActionInspector", () => {
                         targetDefensiveBonus: 1,
                         multipleAttackPenalty: 3,
                         netModifier: -1,
+                        isFlankingTarget: false,
                     },
                 },
             ]
@@ -613,6 +614,7 @@ describe("squaddieActionInspector", () => {
                         targetDefensiveBonus: 1,
                         multipleAttackPenalty: 6,
                         netModifier: -4,
+                        isFlankingTarget: false,
                     },
                 },
             ]
@@ -636,6 +638,7 @@ describe("squaddieActionInspector", () => {
                         targetDefensiveBonus: 1,
                         multipleAttackPenalty: 0,
                         netModifier: 0,
+                        isFlankingTarget: false,
                         actorFrightenedPenalty: 2,
                     },
                 },
@@ -660,6 +663,7 @@ describe("squaddieActionInspector", () => {
                         targetDefensiveBonus: 1,
                         multipleAttackPenalty: 0,
                         netModifier: 1,
+                        isFlankingTarget: false,
                         targetFrightenedPenalty: 1,
                     },
                 },

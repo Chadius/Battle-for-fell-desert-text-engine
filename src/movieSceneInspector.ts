@@ -1,12 +1,15 @@
 import type { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
 import { MovieSceneType } from "../logic/src/movie/movieScene.js"
+import type { ConversationSceneStatus } from "../logic/src/movie/movieSceneConversation.js"
 
 export type CurrentScene = NonNullable<
     NonNullable<ReturnType<MissionEngine["getMovieStatus"]>>["currentScene"]
 >
 
 // Returns true when the scene is a conversation that is currently blocking on a player decision.
-export const sceneIsWaitingForDecision = (scene: CurrentScene): boolean =>
+export const sceneIsWaitingForDecision = (
+    scene: CurrentScene
+): scene is ConversationSceneStatus =>
     scene.type === MovieSceneType.CONVERSATION && scene.isWaitingForDecision
 
 // Formats a single movie scene as player-facing display text.

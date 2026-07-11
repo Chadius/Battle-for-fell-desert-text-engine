@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, existsSync } from "node:fs"
 import { join } from "node:path"
 import type { Movie } from "../logic/src/movie/movie.js"
+import type { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
 import { MovieCollectionLoader } from "./movieCollectionLoader.js"
 
 export const CAMPAIGN_DATA_FOLDER = "campaignData"

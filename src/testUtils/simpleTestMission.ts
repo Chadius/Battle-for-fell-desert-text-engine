@@ -523,6 +523,7 @@ function createLimitedBlastAction(): SquaddieAction {
                         SquaddieConditionService.new({
                             type: SquaddieConditionType.ARMOR,
                             amount: { amount: 1 },
+                            duration: undefined,
                             source: SquaddieConditionSource.SPIRITUAL,
                         }),
                     ],

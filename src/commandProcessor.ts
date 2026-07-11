@@ -15,6 +15,7 @@ import {MovementInspector,} from "./movementInspector.js"
 import {ActionResultInspector} from "./actionResultInspector.js"
 import {OffsetCoordinate} from "../logic/src/coordinateMap/offsetCoordinate.js";
 import {CoordinateCalculator} from "../logic/src/coordinateMap/coordinateCalculator.js";
+import {CoordinateMapService} from "../logic/src/coordinateMap/coordinateMap.js";
 
 // Ordered list of all known debug flags. Index 1-based maps to DS <n> commands.
 // Append new flags here as they are added to DebugFlags.
@@ -563,7 +564,13 @@ const handleInitiateCombatActionWithActorAsAimCoordinate = (
         return { action: "selectAction", message: "Cannot find actor position." }
     }
 
-    const aimCoordinate = actorPosition.coordinate
+    const aimCoordinate = CoordinateMapService.convertOffsetMaybeOffmapCoordinate(
+        actorPosition.coordinate
+    )
+    if (aimCoordinate == undefined) {
+        return { action: "selectAction", message: "Cannot find actor position." }
+    }
+
     const allTargetIds = engine.getTargetsForAimCoordinate({
         actor: actingSquaddieId,
         actionId,
