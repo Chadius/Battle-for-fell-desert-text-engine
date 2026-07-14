@@ -333,6 +333,25 @@ describe("TextMissionRunner", () => {
                 })
             })
 
+            describe("when dialogue text references TIME_ELAPSED", () => {
+                it("formats the accumulated decision time as m:ss", () => {
+                    let currentMs = 0
+                    const engine = new MissionEngineTestHarness()
+                    const runner = new TextMissionRunner(engine, () => currentMs)
+
+                    currentMs += 65000
+                    runner.processInput("0, 0")
+
+                    engine.playMovie(
+                        makeConversationMovie(["Elapsed: {timeFormat(TIME_ELAPSED, m:ss)}"]),
+                        []
+                    )
+                    const result = runner.processInput("M")
+
+                    expect(result.text).toContain("Elapsed: 1:05")
+                })
+            })
+
             describe("when the mission is done and a single-scene movie is playing", () => {
                 let engine: MissionEngineTestHarness
                 let runner: TextMissionRunner
@@ -427,6 +446,88 @@ describe("TextMissionRunner", () => {
 
                 expect(result.text).toContain("Enemy Turn")
             })
+        })
+    })
+
+    describe("decision clock", () => {
+        // A controllable stand-in for Date.now(): advance() simulates wall-clock time passing
+        // between prompts without needing real sleeps in the test.
+        const makeClock = () => {
+            let currentMs = 0
+            return {
+                now: () => currentMs,
+                advance: (ms: number) => {
+                    currentMs += ms
+                },
+            }
+        }
+
+        it("accumulates time spent waiting for player input during the player's turn", () => {
+            const engine = new MissionEngineTestHarness()
+            const clock = makeClock()
+            const runner = new TextMissionRunner(engine, clock.now)
+
+            clock.advance(5000)
+            runner.processInput("0, 0")
+            clock.advance(3000)
+            runner.processInput("M")
+
+            expect(runner.getElapsedDecisionTimeMs()).toBe(8000)
+        })
+
+        it("does not attribute any elapsed time to the automatic enemy turn", () => {
+            const engine = new MissionEngineTestHarness()
+            const clock = makeClock()
+            const runner = new TextMissionRunner(engine, clock.now)
+
+            clock.advance(4000)
+            runner.processInput("0, 0")
+            clock.advance(2000)
+            runner.processInput("AE")
+
+            expect(runner.getElapsedDecisionTimeMs()).toBe(6000)
+
+            clock.advance(1500)
+            runner.processInput("M")
+
+            expect(runner.getElapsedDecisionTimeMs()).toBe(7500)
+        })
+
+        it("does not count time spent while a movie is playing", () => {
+            // The movie must start as a consequence of processInput (a PLAY_MOVIE reward
+            // firing mid-action), matching how the real app triggers movies. The runner never
+            // sees engine state change except through processInput, so that's the only
+            // realistic way to exercise the clock pausing for dialogue.
+            const engine = new MissionEngineTestHarness()
+            engine.registerMovie(makeConversationMovie(["Victory scene"]))
+            engine.addObjective(
+                MissionObjectiveService.new({
+                    id: "play-victory-movie",
+                    rewards: [MissionObjectiveRewardService.newPlayMovieReward("test-movie")],
+                    criteria: [
+                        MissionObjectiveCriteriaService.newAllSquaddiesDefeatedCriteria({
+                            affiliations: [SquaddieAffiliation.ENEMY],
+                        }),
+                    ],
+                })
+            )
+            const clock = makeClock()
+            const runner = new TextMissionRunner(engine, clock.now)
+
+            clock.advance(4000)
+            runner.processInput("0, 0")
+            engine.defeatSlitherDemon()
+            clock.advance(2000)
+            const triggerResult = runner.processInput("AE")
+
+            expect(triggerResult.text).toContain("Victory scene")
+            const elapsedWhenMovieStarted = runner.getElapsedDecisionTimeMs()
+            expect(elapsedWhenMovieStarted).toBe(6000)
+
+            clock.advance(10000)
+            runner.processInput("")
+
+            expect(runner.getElapsedDecisionTimeMs()).toBe(elapsedWhenMovieStarted)
         })
     })
 })

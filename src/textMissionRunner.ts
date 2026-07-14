@@ -20,6 +20,8 @@ import { renderMap, type MapRenderInfo } from "./mapRenderer.js"
 import { baseRenderInfo } from "./mapDataGatherer.js"
 import { EnemyAI } from "./enemyAI.js"
 import type { MissionObjective } from "../logic/src/mission/missionObjective.js"
+import { MissionTextSubstitutionToken } from "../logic/src/mission/missionEngine/textSubstitutionTokens.js"
+import { DecisionClock } from "./decisionClock.js"
 
 const MAX_ADVANCEMENT_STEPS = 30
 
@@ -35,9 +37,11 @@ export class TextMissionRunner {
     private lastKnownInteractivePhase: TMissionAffiliationTurn | undefined =
         undefined
     private overlayMap: string | undefined = undefined
+    private readonly decisionClock: DecisionClock
 
-    constructor(engine: MissionEngine) {
+    constructor(engine: MissionEngine, now: () => number = Date.now) {
         this.engine = engine
+        this.decisionClock = new DecisionClock(now)
         this.context = {
             selectedSquaddieId: undefined,
             interactionPhase: InteractionPhase.BROWSING,
@@ -45,6 +49,39 @@ export class TextMissionRunner {
             pendingActionId: undefined,
         }
         this.initialPhaseMessages = this.advanceToInteractivePhase()
+        this.syncDecisionClock()
+    }
+
+    // The decision clock only runs while a human is expected to act — the same condition
+    // that makes advanceToInteractivePhase()'s loop stop and wait, outside of movies/dialogue.
+    private isAwaitingPlayerDecision(): boolean {
+        if (this.engine.isMoviePlaying()) return false
+        return this.isWaitingForHumanInput(this.engine.getCurrentAffiliationTurn())
+    }
+
+    // True when the given phase requires a human decision: it's interactive, and — for
+    // ENEMY_TURN specifically — no AI action is preloaded (either no AI-controlled squaddie
+    // can act, or the phase's active squaddie is human-controlled via an override).
+    private isWaitingForHumanInput(
+        currentPhase: TMissionAffiliationTurn
+    ): boolean {
+        if (!this.isInteractivePhase(currentPhase)) return false
+        return !(
+            currentPhase === MissionAffiliationTurn.ENEMY_TURN &&
+            this.engine.getReadiedAction() != undefined
+        )
+    }
+
+    private syncDecisionClock(): void {
+        if (this.isAwaitingPlayerDecision()) {
+            this.decisionClock.start()
+        } else {
+            this.decisionClock.stop()
+        }
+    }
+
+    getElapsedDecisionTimeMs(): number {
+        return this.decisionClock.elapsedMs()
     }
 
     getWelcomeText(): string {
@@ -109,8 +146,18 @@ export class TextMissionRunner {
         return undefined
     }
 
+    // Dialogue text may reference {TIME_ELAPSED} (e.g. via timeFormat()), which throws on
+    // substitution if the token is missing — so every getMovieStatus() call must supply it.
+    private movieStatus(): ReturnType<MissionEngine["getMovieStatus"]> {
+        return this.engine.getMovieStatus({
+            [MissionTextSubstitutionToken.TIME_ELAPSED]: String(
+                this.getElapsedDecisionTimeMs()
+            ),
+        })
+    }
+
     private currentSceneText(): string {
-        const status = this.engine.getMovieStatus()
+        const status = this.movieStatus()
         if (status == undefined || status.currentScene == undefined) return ""
         return sceneDisplayText(status.currentScene)
     }
@@ -121,7 +168,7 @@ export class TextMissionRunner {
         const command = this.movieCommandFromInput(input)
 
         // Decision scenes are blocking — recognized movie commands are silently re-displayed
-        const currentScene = this.engine.getMovieStatus()?.currentScene
+        const currentScene = this.movieStatus()?.currentScene
         if (currentScene != undefined && sceneIsWaitingForDecision(currentScene)) {
             if (command != undefined) {
                 return { text: this.currentSceneText(), shouldQuit: false }
@@ -202,6 +249,15 @@ export class TextMissionRunner {
     }
 
     processInput(input: string): ProcessInputResult {
+        this.decisionClock.stop()
+        const result = this.processInputAndAdvance(input)
+        if (!result.shouldQuit) {
+            this.syncDecisionClock()
+        }
+        return result
+    }
+
+    private processInputAndAdvance(input: string): ProcessInputResult {
         if (this.engine.isMoviePlaying()) {
             return this.processMovieInput(input)
         }
@@ -329,14 +385,11 @@ export class TextMissionRunner {
             if (!isInteractive) {
                 // Advance through a single non-interactive bookend phase (START/END)
                 allMessages.push(...this.stepToNextPhase())
-            } else if (
-                currentPhase === MissionAffiliationTurn.ENEMY_TURN &&
-                this.engine.getReadiedAction() != undefined
-            ) {
+            } else if (!this.isWaitingForHumanInput(currentPhase)) {
                 allMessages.push(...this.processEnemySquaddies())
             } else {
-                // Human-controlled interactive phase, or an enemy phase with no more
-                // readied actions (engine already auto-advanced past this turn) — stop.
+                // A human is expected to act (PLAYER_TURN/ALLY_TURN/NONE_AFFILIATION_TURN, or
+                // an ENEMY_TURN squaddie that's human-controlled via override) — stop.
                 break
             }
 
