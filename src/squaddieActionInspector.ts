@@ -11,8 +11,9 @@ export const SquaddieActionInspector = {
     actionCostSuffix: (
         cost: ActionPointCost | undefined,
         cooldownTurns?: number,
-        usesPerTurn?: number
-    ) => actionCostSuffix(cost, cooldownTurns, usesPerTurn),
+        usesPerTurn?: number,
+        usesPerMission?: number
+    ) => actionCostSuffix(cost, cooldownTurns, usesPerTurn, usesPerMission),
     squaddieActionsText: (
         validity: SquaddieActionValidity,
     ) => squaddieActionsText(validity),
@@ -28,7 +29,8 @@ export const SquaddieActionInspector = {
 const actionCostSuffix = (
     cost: ActionPointCost | undefined,
     cooldownTurns?: number,
-    usesPerTurn?: number
+    usesPerTurn?: number,
+    usesPerMission?: number
 ): string => {
     const parts: string[] = []
     if (cost === "all") {
@@ -41,6 +43,9 @@ const actionCostSuffix = (
     }
     if (usesPerTurn != undefined) {
         parts.push(`${usesPerTurn}x/turn`)
+    }
+    if (usesPerMission != undefined) {
+        parts.push(`${usesPerMission}x/mission`)
     }
     if (parts.length === 0) return ""
     return ` (${parts.join(", ")})`
@@ -67,7 +72,7 @@ const squaddieActionsText = (
     if (validActions.length > 0) {
         lines.push("  Valid:")
         for (const action of validActions) {
-            lines.push(`    ${action.actionName}${actionCostSuffix(action.apCost, action.cooldownTurns, action.usesPerTurn)}`)
+            lines.push(`    ${action.actionName}${actionCostSuffix(action.apCost, action.cooldownTurns, action.usesPerTurn, action.usesPerMission)}`)
         }
     }
 
@@ -99,7 +104,8 @@ const squaddieActionsWithKeysText = (
         const suffix = actionCostSuffix(
             resolvedAction?.apCost,
             resolvedAction?.cooldownTurns,
-            resolvedAction?.usesPerTurn
+            resolvedAction?.usesPerTurn,
+            resolvedAction?.usesPerMission
         )
 
         if (invalidAction == undefined) {
@@ -111,7 +117,7 @@ const squaddieActionsWithKeysText = (
 
     const endTurnValid = validMap.get(DEFAULT_END_TURN_ACTION_ID)
     if (endTurnValid != undefined) {
-        lines.push(`  AE - ${endTurnValid.actionName}${actionCostSuffix(endTurnValid.apCost, endTurnValid.cooldownTurns, endTurnValid.usesPerTurn)}`)
+        lines.push(`  AE - ${endTurnValid.actionName}${actionCostSuffix(endTurnValid.apCost, endTurnValid.cooldownTurns, endTurnValid.usesPerTurn, endTurnValid.usesPerMission)}`)
     }
 
     const moveValid = validMap.get(DEFAULT_MOVE_ACTION_ID)

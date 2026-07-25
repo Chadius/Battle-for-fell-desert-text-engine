@@ -43,8 +43,7 @@ preferred to use a Type that Inherits from the Interface and removes/replaces fi
 ## Folder conventions
 
 `src` - This is the top level of our application files.
-`logic` - Refers to the game logic. This is a git submodule, so you should not edit this directly. If you ever need to
-make a change to the logic, prompt me first. I have a local copy of the logic submodule and should make edits in there.
+`logic` - Refers to the game logic. This is a git submodule, so you should not edit this directly. If you ever need to make a change to the logic, prompt me first. I have a local copy of the logic submodule and should make edits in there. You can always delete stale build artifacts.
 Then you can update this submodule with the changes.
 
 ## Error handling

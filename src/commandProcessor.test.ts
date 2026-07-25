@@ -1433,12 +1433,17 @@ describe("processCommand", () => {
             expect(result.message).toContain("Press Y to confirm or N/C to cancel.")
         })
 
-        it("an out-of-range destination keeps the player in destination selection with an error", () => {
+        it("an out-of-range destination cancels the action back to BROWSING", () => {
             const { engine, result: rescueResult } = setupValeSelectsRescue()
             const destinationContext = rescueResult.updatedContext!
             // Fracta's tile (2,2) is far from Vale — not within MELEE range
             const result = processCommand("2,2", engine, destinationContext)
-            expect(result.updatedContext?.pendingActionIsSelectingTeleportDestination).toBe(true)
+            expect(result.action).toBe("cancelAction")
+            expect(result.message).toContain("out of range")
+            expect(result.updatedContext?.interactionPhase).toBe(
+                InteractionPhase.BROWSING
+            )
+            expect(result.updatedContext?.pendingActionIsSelectingTeleportDestination).toBeUndefined()
         })
 
         it("canceling from destination selection (non-coordinate input) returns to BROWSING", () => {
@@ -1473,7 +1478,36 @@ describe("processCommand", () => {
                 `(${destination.row}, ${destination.col})`
             )
         })
+
+        it("selecting Rescue without enough AP reports the real reason instead of drilling into destination selection", () => {
+            const { engine, context } = setupValeWithInsufficientAPForRescue()
+
+            const result = processCommand("A2", engine, context)
+
+            expect(result.action).toBe("selectAction")
+            expect(result.message).toContain("Cannot use Rescue")
+            expect(result.message).toContain("action point")
+            expect(result.updatedContext).toBeUndefined()
+        })
     })
+
+    // Spends Vale's AP down to 1 via Gravity Pull (A1, 2 AP), leaving her without
+    // enough AP for Rescue (2 AP), and returns her to BROWSING.
+    const setupValeWithInsufficientAPForRescue = () => {
+        const allFoursQueue = Array<number>(40).fill(4)
+        const { engine, valeId } = createMovementMissionEngine(
+            new RollGenerator(allFoursQueue)
+        )
+        const context: CommandContext = {
+            selectedSquaddieId: valeId,
+            interactionPhase: InteractionPhase.BROWSING,
+            actingSquaddieId: undefined,
+        }
+        const gravityPullResult = processCommand("A1", engine, context)
+        processCommand("Y", engine, gravityPullResult.updatedContext!)
+
+        return { engine, valeId, context }
+    }
 
     describe("debug flag commands", () => {
         const createEngine = () => {

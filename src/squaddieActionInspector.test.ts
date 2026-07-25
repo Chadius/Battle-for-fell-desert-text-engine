@@ -72,6 +72,22 @@ describe("squaddieActionInspector", () => {
         it("shows only usesPerTurn when AP cost is 0", () => {
             expect(SquaddieActionInspector.actionCostSuffix(0, undefined, 1)).toBe(" (1x/turn)")
         })
+
+        it("appends usesPerMission after AP cost", () => {
+            expect(SquaddieActionInspector.actionCostSuffix(1, undefined, undefined, 2)).toBe(" (1 AP, 2x/mission)")
+        })
+
+        it("shows usesPerMission of 1 as '1x/mission'", () => {
+            expect(SquaddieActionInspector.actionCostSuffix(1, undefined, undefined, 1)).toBe(" (1 AP, 1x/mission)")
+        })
+
+        it("shows usesPerTurn and usesPerMission together", () => {
+            expect(SquaddieActionInspector.actionCostSuffix(1, 2, 3, 4)).toBe(" (1 AP, 2-turn cooldown, 3x/turn, 4x/mission)")
+        })
+
+        it("shows only usesPerMission when AP cost is 0", () => {
+            expect(SquaddieActionInspector.actionCostSuffix(0, undefined, undefined, 2)).toBe(" (2x/mission)")
+        })
     })
 
     describe("formatSquaddieActions", () => {
@@ -228,6 +244,25 @@ describe("squaddieActionInspector", () => {
 
             const result = SquaddieActionInspector.squaddieActionsText(validity)
             expect(result).toContain("    Blast - Already used 1 of 1 time this turn")
+        })
+
+        it("shows usesPerMission alongside AP cost for valid mission-limited actions", () => {
+            const validity = validityWithValidAction({ actionName: "Warcry", apCost: 1, usesPerMission: 2 })
+
+            const result = SquaddieActionInspector.squaddieActionsText(validity)
+            expect(result).toContain("    Warcry (1 AP, 2x/mission)")
+        })
+
+        it("shows the invalid reason for an action that has exceeded its mission use limit", () => {
+            const validity = validityWithInvalidAction({
+                actionName: "Warcry",
+                apCost: 1,
+                usesPerMission: 2,
+                reason: "Already used 2 of 2 times this mission",
+            })
+
+            const result = SquaddieActionInspector.squaddieActionsText(validity)
+            expect(result).toContain("    Warcry - Already used 2 of 2 times this mission")
         })
 
         it("shows Limited Blast with its use limit in Lini's action list at the start of her turn", () => {
@@ -475,6 +510,26 @@ describe("squaddieActionInspector", () => {
             const result = SquaddieActionInspector.squaddieActionsWithKeysText(validity)
             expect(result).toContain("A1 - Blast (1 AP, 1x/turn)")
             expect(result).toContain("[Already used 1 of 1 time this turn]")
+        })
+
+        it("shows usesPerMission alongside AP cost in the keyed action list for mission-limited actions", () => {
+            const validity = validityWithValidAction({ actionName: "Warcry", apCost: 1, usesPerMission: 2 })
+
+            const result = SquaddieActionInspector.squaddieActionsWithKeysText(validity)
+            expect(result).toContain("A1 - Warcry (1 AP, 2x/mission)")
+        })
+
+        it("shows usesPerMission and invalid reason when action exceeds its mission use limit", () => {
+            const validity = validityWithInvalidAction({
+                actionName: "Warcry",
+                apCost: 1,
+                usesPerMission: 2,
+                reason: "Already used 2 of 2 times this mission",
+            })
+
+            const result = SquaddieActionInspector.squaddieActionsWithKeysText(validity)
+            expect(result).toContain("A1 - Warcry (1 AP, 2x/mission)")
+            expect(result).toContain("[Already used 2 of 2 times this mission]")
         })
 
         it("labels Lini's five combat actions A1-A5 and assigns AE and AM to End Turn and Move", () => {
@@ -742,6 +797,7 @@ function validityWithValidAction(opts: {
     actionName: string
     apCost: number
     usesPerTurn?: number
+    usesPerMission?: number
 }): SquaddieActionValidity {
     return {
         battleSquaddieId: emptyBattleSquaddieId,
@@ -750,6 +806,7 @@ function validityWithValidAction(opts: {
             actionName: opts.actionName,
             apCost: opts.apCost,
             usesPerTurn: opts.usesPerTurn,
+            usesPerMission: opts.usesPerMission,
             reachableCoordinates: [],
             aimCoordinateResults: [],
         }],
@@ -761,6 +818,7 @@ function validityWithInvalidAction(opts: {
     actionName: string
     apCost: number
     usesPerTurn?: number
+    usesPerMission?: number
     reason: string
 }): SquaddieActionValidity {
     return {
@@ -771,6 +829,7 @@ function validityWithInvalidAction(opts: {
             actionName: opts.actionName,
             apCost: opts.apCost,
             usesPerTurn: opts.usesPerTurn,
+            usesPerMission: opts.usesPerMission,
             reason: opts.reason,
         }],
     }

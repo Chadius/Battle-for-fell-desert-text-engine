@@ -487,15 +487,9 @@ const handleSelectNumberedAction = (
         (a) => a.actionId === actionId
     )
     if (invalidAction != undefined) {
-        // Actions that require a destination decision (e.g. Rescue) are always categorized as
-        // invalid because the destination isn't chosen yet. Allow them to proceed through the
-        // two-step target → destination flow.
-        const decisions = engine.getRequiredDecisionsForAction(actionId)
-        if (!decisions.requiresTargetDestination) {
-            return {
-                action: "selectAction",
-                message: `Cannot use ${invalidAction.actionName}: ${invalidAction.reason}`,
-            }
+        return {
+            action: "selectAction",
+            message: `Cannot use ${invalidAction.actionName}: ${invalidAction.reason}`,
         }
     }
 
@@ -1175,11 +1169,10 @@ const handleTeleportDestinationSelection = (
     })
 
     if (!readyResult.isValid) {
-        // Keep the player in destination selection so they can try a different tile.
         return {
-            action: "executeAction",
-            message: readyResult.message ?? "Invalid destination. Try another tile:",
-            updatedContext: context,
+            action: "cancelAction",
+            message: readyResult.message ?? "Cannot perform this action.",
+            updatedContext: browsingContext(),
         }
     }
 

@@ -10,6 +10,9 @@ The test harness mission (via `MissionEngineTestHarness`) is the primary playabl
 (player) versus the Slither Demon (enemy) on a 5×4 map. The win condition is defeating all enemies;
 the lose condition is having all player squaddies defeated.
 
+Missions can also be loaded from JSON campaign data on disk (`campaignLoader.ts`), including
+movies/cutscenes (`movieCollectionLoader.ts`, `movieSceneInspector.ts`) that play between phases.
+
 ---
 
 ## Architecture
@@ -79,51 +82,34 @@ The `MissionEngine` class (logic submodule) exposes these operations used by the
 |---|---|
 | `Q` | Quit |
 | `M` | Render the map with terrain, squaddies, turn info, and objectives |
-| `?` | List context-sensitive commands |
+| `?` | List context-sensitive commands, current turn flow, and objectives summary |
 | `P` | Show current phase and turn number |
 | `O` | Show mission objectives and their status |
 | `W` | List squaddies that can act this phase with location |
 | `row, col` | Inspect a tile; selects the squaddie there if one is present |
-| `L` | Show details for the selected squaddie (HP, AP, conditions, actions) |
-| `A` | List available actions for the selected squaddie |
+| `L` | Show details for the selected squaddie (HP, AP, conditions with remaining duration, actions) |
+| `A` | List available actions for the selected squaddie, numbered |
+| `A<n>` | Select the numbered action (e.g. `A1`); enters `SELECTING_TARGET` for actions with targets |
 | `AE` | End the selected squaddie's turn |
 | `AM` | Show reachable tiles; enter `SELECTING_TARGET` to choose a destination |
-| *(coordinate while in SELECTING_TARGET)* | Execute movement to that tile |
+| *(coordinate while in SELECTING_TARGET)* | Choose a target/destination; for combat actions, previews the forecast and enters `CONFIRMING_ACTION` |
+| `Y` | (in `CONFIRMING_ACTION`) Confirm and execute the readied action; displays results |
+| `N` / `C` | (in `CONFIRMING_ACTION`) Cancel back to target selection or browsing |
+| `Z` | Undo the last undoable action |
+| `DF` | List debug flags and their ON/OFF state |
+| `DS <n>` | Toggle debug flag `<n>` (see `DEBUG_FLAG_NAMES` in `commandProcessor.ts`) |
+
+Attempting to command a squaddie outside its affiliation's turn returns a clear error
+(`"Cannot command X: it is not Y's turn."`) rather than failing silently.
 
 ### What is not yet implemented
 
 **Missing runner capabilities:**
 
-1. **Combat action execution** — The action list (from `L` or `A`) shows Scimitar, Heal, Claw, etc.,
-   but there is no command to execute them. `actionKeyMap` only maps `E` and `M`. Issuing a combat
-   action requires: selecting the action by key, entering target selection mode (choosing a
-   target by coordinate or squaddie), optionally previewing the forecast, confirming, executing,
-   and displaying the results.
-
-2. **Action result display** — `useActionAndGetResults()` returns hit/miss outcomes, degree of
-   success, damage dealt, and HP changes. None of this is rendered to the player today (movement
-   is a special case that shows the route map but no stat changes).
-
-3. **Mission end detection** — `engine.isDone()` is available but the runner never calls it.
-   When all enemies are defeated or all player squaddies fall, the game continues silently rather
-   than announcing a win or loss and halting the loop.
-
-4. **Enemy AI** — `ENEMY_TURN` is listed as an interactive phase, so the runner stops and waits
-   for user input. But no commands are routed to make enemies act. Enemies sit idle until the
-   player manually ends their turns via `W` + select + `AE` — which requires selecting an enemy
-   as if you controlled it, and the engine currently allows this.
-
-5. **Ally AI** — Same problem as enemies. Allied squaddies (if any) have no automated behavior.
-
-6. **Undo command** — `undoLastPlayerUndoableAction()` exists in the engine but there is no CLI
-   command bound to it.
-
-7. **Action forecast/preview** — `previewReadiedActionAndForecastResults()` is available but
-   unused. A player has no way to inspect odds before committing.
-
-8. **`CONFIRMING_ACTION` and `VIEWING_RESULTS` phases** — These interaction states are defined
-   in `InteractionPhase` but are never entered. Confirmation before execution and a dedicated
-   results view are not wired up.
+1. **Ally AI** — `isWaitingForHumanInput()` special-cases only `ENEMY_TURN` (skipping the wait
+   when the enemy AI has preloaded an action via `getReadiedAction()`). `ALLY_TURN` has no such
+   case, so allied squaddies still require a human to play them out manually via `W` + select +
+   actions, the same as a player squaddie. `enemyAI.ts` has no ally counterpart.
 
 ---
 
@@ -137,7 +123,7 @@ completeness:
    `getRecommendedEnemyAction()` or similar method. (DONE)
 
 2. **Ally AI system** — Same as enemies. Allied squaddies that are not player-controlled have no
-   decision-making path.
+   decision-making path. Still missing — see runner gap above.
 
 3. **Squaddie controller / ownership model** — There is no concept of "who controls this
    squaddie." Affiliation determines which phase a squaddie acts in, but nothing in the engine
@@ -170,8 +156,8 @@ moving, attacking, seeing results, watching enemies act, and receiving a win or 
 
 **Goal:** The player can select and execute combat actions against valid targets.
 
-- Extend `actionKeyMap` to include named keys for non-default actions available on the test
-  harness squaddies (e.g., `AS` for Scimitar, `AH` for Heal).
+- Extend action selection to cover non-default actions available on the test harness squaddies
+  (implemented as numbered keys, e.g. `A1`, `A2` — see `combatActionIndex` in `actionKeyIndex.ts`).
 - When an action with targets is selected, call `getSquaddieActionValidity()` to retrieve
   `targetCoordinates` for that action, then enter `SELECTING_TARGET` mode.
 - Show the map with target tiles highlighted (similar to movement overlay).
@@ -222,15 +208,42 @@ This phase requires additions to the `logic` submodule:
 - Keep the existing human-input loop only for `PLAYER_TURN` (and any phase where the active
   squaddies are marked as human-controlled).
 
-### Phase 6 — Polish and Robustness
+### Phase 6 — Polish and Robustness (DONE)
 
 **Goal:** Clean up edge cases to make the play session feel complete.
 
 - Guard against selecting a squaddie from the wrong affiliation and attempting to command it
-  during the wrong phase. Display a clear error instead of silently failing.
+  during the wrong phase. Display a clear error instead of silently failing. (DONE —
+  `commandProcessor.ts`'s `handleSelectAction` checks phase affiliation before any mutating
+  sub-command.)
 - When a squaddie is defeated mid-combat, display a defeat message and remove it from the
-  controllable list immediately.
-- Show conditions and their remaining duration in the squaddie detail view.
+  controllable list immediately. (DONE — `actionResultInspector.ts` prints
+  `"<name> is knocked out!"` as part of the action result text.)
+- Show conditions and their remaining duration in the squaddie detail view. (DONE —
+  `squaddieDetailInspector.ts`'s `formatCondition()` appends `(N turns remaining)`.)
 - Add a `help` or `?` command that also explains the turn flow and the objective win/loss
-  conditions.
+  conditions. (DONE — `?` prints the command list, turn flow, and an objectives summary.)
 - Ensure the test harness map name is displayed when rendering the map. (DONE)
+
+### Beyond the original plan
+
+Work not covered by the phases above has since landed and is not reflected in the phase list:
+
+- **Campaign/JSON mission loading** (`campaignLoader.ts`) — missions, squaddies, items, actions,
+  and maps can be loaded from JSON files on disk instead of only the hardcoded test harness.
+- **Movie/cutscene playback** (`movieCollectionLoader.ts`, `movieSceneInspector.ts`) — campaigns
+  can define movies that play between phases; the runner detects `engine.isMoviePlaying()` and
+  routes input accordingly instead of treating that time as an interactive phase.
+- **Debug flags** (`DF` / `DS <n>` commands) — toggle engine-level debug behavior
+  (`enemyAlwaysEndsTheirTurn`, `revealHiddenMissionObjectives`) at runtime.
+- **Hidden mission objectives** — objectives can be hidden from the player until the
+  `revealHiddenMissionObjectives` debug flag is set.
+- **Teleport/forced-movement actions** (e.g. Rescue) — a two-phase target-then-destination
+  selection flow (`pendingActionIsSelectingTeleportDestination`) distinct from normal movement
+  and normal combat targeting.
+- **Line/area targeting and flanking display** — `buildActionEffectMapText` renders bolt paths,
+  aim coordinates, and hit targets on the map; sneak-attack/flanking status is surfaced in results.
+- **Text substitution and decision-clock tracking** — `MissionTextSubstitutionToken` fills in
+  dynamic text (e.g. squaddie names) in movie/scene text, and `DecisionClock` tracks how long the
+  runner has been waiting on a human decision (`getElapsedDecisionTimeMs()`), pausing during
+  movies and AI-driven turns.
