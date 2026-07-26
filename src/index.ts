@@ -4,6 +4,7 @@ import { join } from "node:path"
 import termKit from "terminal-kit"
 import { MissionEngineTestHarness } from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
 import { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
+import { MissionManager } from "../logic/src/mission/missionManager.js"
 import { TextMissionRunner } from "./textMissionRunner.js"
 import type { DebugFlags } from "../logic/src/mission/debugFlags.js"
 import { DEBUG_FLAG_NAMES } from "./commandProcessor.js"
@@ -13,10 +14,12 @@ import {
     MAIN_CAMPAIGN_FOLDER,
     MISSIONS_SUBFOLDER,
     listAvailableMissions,
+    loadArmyFromFolder,
     loadMissionFromFolder,
     loadMoviesFromFolder,
 } from "./campaignLoader.js"
 import { initLogger, appendLog } from "./logger.js"
+import { wrapLine } from "./terminalLayout.js"
 
 const term = termKit.terminal
 
@@ -118,7 +121,8 @@ async function selectAndLoadMission(rl: readline.Interface): Promise<MissionEngi
     const selected = await promptMissionSelection(rl, missionNames)
     const missionFolderPath = join(missionsPath, selected)
 
-    const engine = new MissionEngine()
+    const armyManager = loadArmyFromFolder(campaignFolderPath)
+    const engine = new MissionEngine(new MissionManager({ armyManager }))
     const result = loadMissionFromFolder(engine, campaignFolderPath, missionFolderPath)
     if (!result.isValid) {
         console.error(`Mission "${selected}" failed to load:`)
@@ -141,7 +145,7 @@ const getLayoutDimensions = () => {
 
 // Draws the split-pane layout: map on the left, output lines on the right, divider between them.
 const redrawScreen = (mapText: string, outputLines: string[]): void => {
-    const { leftWidth, rightStart } = getLayoutDimensions()
+    const { leftWidth, rightStart, rightWidth } = getLayoutDimensions()
     const maxOutputRows = term.height - 3
 
     term.clear()
@@ -160,8 +164,9 @@ const redrawScreen = (mapText: string, outputLines: string[]): void => {
         term("│")
     }
 
-    // Draw output lines in right pane (last maxOutputRows entries)
-    const visibleLines = outputLines.slice(-maxOutputRows)
+    // Wrap output lines to the pane width, then draw the last maxOutputRows wrapped rows.
+    const wrappedLines = outputLines.flatMap((line) => wrapLine(line, rightWidth))
+    const visibleLines = wrappedLines.slice(-maxOutputRows)
     visibleLines.forEach((line, i) => {
         term.moveTo(rightStart, i + 1)
         term(line)

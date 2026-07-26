@@ -3,6 +3,8 @@ import { join } from "node:path"
 import type { Movie } from "../logic/src/movie/movie.js"
 import type { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
 import { MovieCollectionLoader } from "./movieCollectionLoader.js"
+import { ArmyManager } from "../logic/src/campaign/army/armyManager.js"
+import { ArmyService } from "../logic/src/campaign/army/army.js"
 
 export const CAMPAIGN_DATA_FOLDER = "campaignData"
 export const CAMPAIGNS_SUBFOLDER = "campaigns"
@@ -57,4 +59,24 @@ export const loadMoviesFromFolder = (campaignFolderPath: string): Movie[] => {
     if (!existsSync(moviesPath)) return []
     const json = JSON.parse(readFileSync(moviesPath, "utf-8"))
     return MovieCollectionLoader.loadFromJSON(json)
+}
+
+// Reads army.json from campaignFolderPath and builds the persistent Campaign Army roster.
+// Returns an empty ArmyManager if army.json does not exist (missions without campaign
+// squaddie deployment don't need one).
+export const loadArmyFromFolder = (campaignFolderPath: string): ArmyManager => {
+    const armyManager = new ArmyManager(ArmyService.new())
+
+    const armyPath = join(campaignFolderPath, "army.json")
+    if (!existsSync(armyPath)) return armyManager
+
+    const json = JSON.parse(readFileSync(armyPath, "utf-8"))
+    const rosterData = Array.isArray(json) ? json : json.data
+    const errors = armyManager.addSquaddiesFromJson(rosterData)
+    if (errors.length > 0) {
+        console.warn(`[campaignLoader] Warnings loading ${armyPath}:`)
+        errors.forEach((e) => console.warn(` - ${e}`))
+    }
+
+    return armyManager
 }

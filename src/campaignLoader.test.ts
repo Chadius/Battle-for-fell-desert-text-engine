@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest"
 import { join } from "node:path"
-import { listAvailableMissions, loadMissionFromFolder } from "./campaignLoader.js"
+import { listAvailableMissions, loadArmyFromFolder, loadMissionFromFolder } from "./campaignLoader.js"
 import { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
+import { TargetPracticeCampaignSquaddieIds } from "./testUtils/deploymentFixture.js"
 
 // campaignData/campaigns/test lives at the project root (one level above src/).
 const campaignFolderPath = join(process.cwd(), "campaignData", "campaigns", "test")
@@ -40,6 +41,27 @@ describe("campaignLoader", () => {
             const missionFolderPath = join(campaignMissionsPath, "testHarness")
             loadMissionFromFolder(engine, campaignFolderPath, missionFolderPath)
             expect(engine.getCurrentAffiliationTurn()).toBeDefined()
+        })
+    })
+
+    describe("loadArmyFromFolder", () => {
+        it("builds an ArmyManager containing every campaign squaddie in army.json", () => {
+            const armyManager = loadArmyFromFolder(campaignFolderPath)
+
+            expect(armyManager.has(TargetPracticeCampaignSquaddieIds.teros)).toBe(true)
+            expect(armyManager.has(TargetPracticeCampaignSquaddieIds.vale)).toBe(true)
+            expect(armyManager.has(TargetPracticeCampaignSquaddieIds.gloria)).toBe(true)
+        })
+
+        it("marks Teros as the leader", () => {
+            const armyManager = loadArmyFromFolder(campaignFolderPath)
+            const teros = armyManager.get(TargetPracticeCampaignSquaddieIds.teros)
+            expect(teros.isLeader).toBe(true)
+        })
+
+        it("returns an empty ArmyManager when army.json does not exist", () => {
+            const armyManager = loadArmyFromFolder("/this/path/does/not/exist")
+            expect(armyManager.getAll()).toEqual([])
         })
     })
 })

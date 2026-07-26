@@ -22,6 +22,12 @@ import { EnemyAI } from "./enemyAI.js"
 import type { MissionObjective } from "../logic/src/mission/missionObjective.js"
 import { MissionTextSubstitutionToken } from "../logic/src/mission/missionEngine/textSubstitutionTokens.js"
 import { DecisionClock } from "./decisionClock.js"
+import { DeploymentInspector } from "./deploymentInspector.js"
+import {
+    processDeploymentCommand,
+    initialDeploymentContext,
+    type DeploymentContext,
+} from "./deploymentCommandProcessor.js"
 
 const MAX_ADVANCEMENT_STEPS = 30
 
@@ -38,6 +44,7 @@ export class TextMissionRunner {
         undefined
     private overlayMap: string | undefined = undefined
     private readonly decisionClock: DecisionClock
+    private deploymentContext: DeploymentContext = initialDeploymentContext()
 
     constructor(engine: MissionEngine, now: () => number = Date.now) {
         this.engine = engine
@@ -48,8 +55,29 @@ export class TextMissionRunner {
             actingSquaddieId: undefined,
             pendingActionId: undefined,
         }
-        this.initialPhaseMessages = this.advanceToInteractivePhase()
+        this.autoFinalizeTrivialDeployment()
+        this.initialPhaseMessages = this.isInDeploymentPhase()
+            ? []
+            : this.advanceToInteractivePhase()
         this.syncDecisionClock()
+    }
+
+    private isInDeploymentPhase(): boolean {
+        return this.engine.isCampaignSquaddieDeploymentInProgress()
+    }
+
+    // If campaign deployment has nothing left to confirm (e.g. every coordinate was locked to
+    // a specific/leader request and got auto-assigned, with no open slots or unplaced eligible
+    // squaddies remaining), finalize it immediately instead of prompting with an empty screen.
+    private autoFinalizeTrivialDeployment(): void {
+        if (!this.isInDeploymentPhase()) return
+        const status = this.engine.getCampaignDeploymentStatus()
+        const nothingToConfirm =
+            status.openCoordinates.length === 0 &&
+            status.unplacedEligibleCampaignSquaddies.length === 0
+        if (nothingToConfirm) {
+            this.engine.finalizeCampaignSquaddieDeploymentAndStartMission()
+        }
     }
 
     // The decision clock only runs while a human is expected to act — the same condition
@@ -86,6 +114,18 @@ export class TextMissionRunner {
 
     getWelcomeText(): string {
         const summary = this.engine.getSerializedInMissionSummary()
+
+        if (this.isInDeploymentPhase()) {
+            return [
+                "Battle of Fell Desert CLI",
+                "=========================",
+                `Map: ${summary.mapName}`,
+                "Deploy your squad before the mission begins. Enter '?' for deployment commands.",
+                "",
+                DeploymentInspector.formatStatus(this.engine),
+            ].join("\n")
+        }
+
         const lines: string[] = [
             "Battle of Fell Desert CLI",
             "=========================",
@@ -116,6 +156,9 @@ export class TextMissionRunner {
     // Returns the overlay map (with target/movement highlights) when one is active, otherwise the
     // plain map. Used by the split-pane UI to refresh the left panel after each command.
     getMapText(): string {
+        if (this.isInDeploymentPhase()) {
+            return DeploymentInspector.renderDeploymentMap(this.engine)
+        }
         if (this.overlayMap != undefined) {
             return this.overlayMap
         }
@@ -242,6 +285,39 @@ export class TextMissionRunner {
         return { text: priorText, shouldQuit: false }
     }
 
+    // Handles all input during pre-mission campaign squaddie deployment. Once the player
+    // finalizes, kicks off the same phase-advancement the constructor would have run normally.
+    private processDeploymentInput(input: string): ProcessInputResult {
+        const result = processDeploymentCommand(input, this.engine, this.deploymentContext)
+
+        if (result.updatedContext != undefined) {
+            this.deploymentContext = result.updatedContext
+        }
+
+        if (result.action === "quit") {
+            return { text: result.message, shouldQuit: true }
+        }
+
+        if (result.action !== "finalize") {
+            return { text: result.message, shouldQuit: false }
+        }
+
+        const phaseMessages = this.advanceToInteractivePhase()
+        const allText = [result.message, ...phaseMessages]
+            .filter((s) => s.length > 0)
+            .join("\n")
+
+        if (this.engine.isMoviePlaying()) {
+            const movieText = this.currentSceneText()
+            return {
+                text: [allText, movieText].filter((s) => s.length > 0).join("\n"),
+                shouldQuit: false,
+            }
+        }
+
+        return this.missionEndResultOrContinue(allText)
+    }
+
     private rewardTerminalObjectives(objectives: MissionObjective[]): void {
         for (const objective of objectives) {
             this.engine.markMissionObjectiveAsRewarded(objective.id)
@@ -258,6 +334,10 @@ export class TextMissionRunner {
     }
 
     private processInputAndAdvance(input: string): ProcessInputResult {
+        if (this.isInDeploymentPhase()) {
+            return this.processDeploymentInput(input)
+        }
+
         if (this.engine.isMoviePlaying()) {
             return this.processMovieInput(input)
         }

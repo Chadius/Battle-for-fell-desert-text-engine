@@ -20,6 +20,10 @@ import { MissionAffiliationTurn } from "../logic/src/mission/missionTurn.js"
 import { SquaddieAffiliation } from "../logic/src/affiliation/affiliation.js"
 import { ResourceManifestEntryService } from "../logic/src/resource/resourceManifest.js"
 import { ResourceManifestCollectionService } from "../logic/src/resource/resourceManifestCollection.js"
+import {
+    buildEngineWithFullyResolvedDeployment,
+    buildTargetPracticeEngine,
+} from "./testUtils/deploymentFixture.js"
 
 // Single IMAGE-scene movie. Optional caption and resourceManifestEntryId control what the scene displays.
 const makeImageMovie = (opts: { caption?: string; resourceManifestEntryId?: string } = {}): Movie => ({
@@ -528,6 +532,64 @@ describe("TextMissionRunner", () => {
             runner.processInput("")
 
             expect(runner.getElapsedDecisionTimeMs()).toBe(elapsedWhenMovieStarted)
+        })
+    })
+
+    describe("campaign squaddie deployment", () => {
+        it("shows deployment status instead of the normal welcome/map while deployment is pending", () => {
+            const engine = buildTargetPracticeEngine()
+
+            const runner = new TextMissionRunner(engine)
+
+            expect(runner.getWelcomeText()).toContain("Deploy your squad")
+            expect(runner.getMapText()).toContain("Deployment")
+        })
+
+        it("does not place any squaddies on the map until deployment is finalized", () => {
+            const engine = buildTargetPracticeEngine()
+
+            new TextMissionRunner(engine)
+
+            expect(engine.getAllSquaddiePositions()).toEqual([])
+        })
+
+        it("shows deployment status when W is entered before deployment is finalized", () => {
+            const engine = buildTargetPracticeEngine()
+            const runner = new TextMissionRunner(engine)
+
+            const result = runner.processInput("W")
+
+            expect(result.text).toContain("Gloria")
+        })
+
+        it("quits when Q is entered during deployment", () => {
+            const engine = buildTargetPracticeEngine()
+            const runner = new TextMissionRunner(engine)
+
+            const result = runner.processInput("Q")
+
+            expect(result.shouldQuit).toBe(true)
+        })
+
+        it("starts the mission once deployment is finalized", () => {
+            const engine = buildTargetPracticeEngine()
+            const runner = new TextMissionRunner(engine)
+
+            runner.processInput("F")
+
+            expect(engine.isCampaignSquaddieDeploymentInProgress()).toBe(false)
+            expect(engine.getAllSquaddiePositions().length).toBeGreaterThan(0)
+            expect(runner.getMapText()).not.toContain("Deployment")
+        })
+
+        it("auto-finalizes when every coordinate is already resolved and nothing is unplaced", () => {
+            const engine = buildEngineWithFullyResolvedDeployment()
+
+            const runner = new TextMissionRunner(engine)
+
+            expect(engine.isCampaignSquaddieDeploymentInProgress()).toBe(false)
+            expect(engine.getAllSquaddiePositions().length).toBe(1)
+            expect(runner.getWelcomeText()).not.toContain("Deploy your squad")
         })
     })
 })

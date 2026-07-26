@@ -121,7 +121,7 @@ const assignDisambiguatedLabels = (
     }
 }
 
-const renderGridLines = (
+export const renderGridLines = (
     overview: MapOverview,
     squaddieLabels: Map<string, string>,
     renderInfo?: MapRenderInfo
@@ -149,7 +149,7 @@ const renderGridLines = (
     return lines
 }
 
-const renderLegend = (): string[] => {
+export const renderLegend = (): string[] => {
     return [
         "",
         "Legend:",
