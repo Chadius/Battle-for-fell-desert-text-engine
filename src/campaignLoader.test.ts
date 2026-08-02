@@ -1,6 +1,8 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, afterEach, vi } from "vitest"
 import { join } from "node:path"
-import { listAvailableMissions, loadArmyFromFolder, loadMissionFromFolder } from "./campaignLoader.js"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { listAvailableMissions, loadArmyFromFolder, loadGlossaryFromFolder, loadMissionFromFolder } from "./campaignLoader.js"
 import { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
 import { TargetPracticeCampaignSquaddieIds } from "./testUtils/deploymentFixture.js"
 
@@ -53,15 +55,82 @@ describe("campaignLoader", () => {
             expect(armyManager.has(TargetPracticeCampaignSquaddieIds.gloria)).toBe(true)
         })
 
-        it("marks Teros as the leader", () => {
+        it("marks Wimp as the leader", () => {
             const armyManager = loadArmyFromFolder(campaignFolderPath)
-            const teros = armyManager.get(TargetPracticeCampaignSquaddieIds.teros)
-            expect(teros.isLeader).toBe(true)
+            const wimp = armyManager.get(TargetPracticeCampaignSquaddieIds.wimp)
+            expect(wimp.isLeader).toBe(true)
         })
 
         it("returns an empty ArmyManager when army.json does not exist", () => {
             const armyManager = loadArmyFromFolder("/this/path/does/not/exist")
             expect(armyManager.getAll()).toEqual([])
+        })
+    })
+
+    describe("loadGlossaryFromFolder", () => {
+        let tempFolderPath: string | undefined
+
+        afterEach(() => {
+            if (tempFolderPath != undefined) {
+                rmSync(tempFolderPath, { recursive: true, force: true })
+                tempFolderPath = undefined
+            }
+        })
+
+        it("builds a GlossaryManager that resolves terms from glossary.json", () => {
+            const glossaryManager = loadGlossaryFromFolder(campaignFolderPath)
+
+            const resolved = glossaryManager.resolveTerm("condition.ARMOR", "en-us")
+            expect(resolved).toEqual({
+                name: "Armor",
+                definition:
+                    "Increases your armor, reducing the chance you will get hit by armor based attacks",
+            })
+        })
+
+        it("returns an empty GlossaryManager when glossary.json does not exist", () => {
+            const glossaryManager = loadGlossaryFromFolder("/this/path/does/not/exist")
+            expect(glossaryManager.has("condition.ARMOR")).toBe(false)
+        })
+
+        it("resolves terms from a glossary.json with no data envelope", () => {
+            tempFolderPath = mkdtempSync(join(tmpdir(), "glossary-loader-"))
+            writeFileSync(
+                join(tempFolderPath, "glossary.json"),
+                JSON.stringify({
+                    terms: [
+                        {
+                            termId: "condition.ARMOR",
+                            type: "SQUADDIE_CONDITION_TYPE",
+                            name: { "en-us": { text: "Armor" } },
+                            definition: { "en-us": { text: "Reduces the chance you get hit." } },
+                        },
+                    ],
+                })
+            )
+
+            const glossaryManager = loadGlossaryFromFolder(tempFolderPath)
+
+            expect(glossaryManager.resolveTerm("condition.ARMOR", "en-us")).toEqual({
+                name: "Armor",
+                definition: "Reduces the chance you get hit.",
+            })
+        })
+
+        it("warns and returns a manager without the malformed terms when glossary.json fails validation", () => {
+            tempFolderPath = mkdtempSync(join(tmpdir(), "glossary-loader-"))
+            writeFileSync(
+                join(tempFolderPath, "glossary.json"),
+                JSON.stringify({ data: { terms: [{ termId: "condition.ARMOR" }] } })
+            )
+            const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
+
+            const glossaryManager = loadGlossaryFromFolder(tempFolderPath)
+
+            expect(warnSpy).toHaveBeenCalled()
+            expect(glossaryManager.has("condition.ARMOR")).toBe(false)
+
+            warnSpy.mockRestore()
         })
     })
 })

@@ -1,4 +1,3 @@
-import { join } from "node:path"
 import { MissionEngine } from "../../logic/src/mission/missionEngine/missionEngine.js"
 import { MissionManager } from "../../logic/src/mission/missionManager.js"
 import { MissionStateService } from "../../logic/src/mission/missionState.js"
@@ -21,52 +20,36 @@ import { SquaddieActionManager } from "../../logic/src/squaddieAction/squaddieAc
 import { SquaddieActionCollectionService } from "../../logic/src/squaddieAction/squaddieActionCollection.js"
 import { AttributeScore } from "../../logic/src/proficiency/attributeScore.js"
 import { SquaddieAffiliation } from "../../logic/src/affiliation/affiliation.js"
-import { loadArmyFromFolder, loadMissionFromFolder } from "../campaignLoader.js"
+import {
+    CampaignTestHarnessWithLockedDeployment,
+    CampaignTestHarnessWithLockedDeploymentIds,
+} from "../../logic/src/testUtils/campaign/campaignTestHarnessWithLockedDeployment.js"
+import type { MissionObjective } from "../../logic/src/mission/missionObjective.js"
+import type { Movie } from "../../logic/src/movie/movie.js"
 
-export const targetPracticeCampaignFolderPath = join(
-    process.cwd(),
-    "campaignData",
-    "campaigns",
-    "test"
-)
-export const targetPracticeMissionFolderPath = join(
-    targetPracticeCampaignFolderPath,
-    "missions",
-    "targetPractice"
-)
-
-// IDs from campaignData/campaigns/test/army.json.
+// IDs from campaignData/campaigns/test/army.json, used by campaignLoader.test.ts to verify
+// real on-disk JSON parsing -- that folder is local/gitignored campaign content, not a stable
+// fixture, so nothing else should depend on its contents (see LockedDeploymentIds below).
 export const TargetPracticeCampaignSquaddieIds = {
     teros: "squaddie-99w1ci",
     vale: "squaddie-0qog1e",
     gloria: "squaddie-u8r9fn",
+    fracta: "squaddie-fzqwnu",
+    wimp: "squaddie-izmo8d",
 } as const
 
-// IDs from campaignData/campaigns/test/missions/targetPractice/missionState.json's
-// campaignSquaddieDeploymentCoordinates: Teros is locked to a LEADER-type coordinate, Vale is
-// locked to a SPECIFIC_SQUADDIE coordinate, and one NONE-type coordinate is left open --
-// Gloria is the only unplaced eligible squaddie left in the roster for it.
-export const TargetPracticeDeploymentCoordinateIds = {
-    terosLeaderSlot: "deployment-d289l6",
-    valeSpecificSlot: "deployment-6av0v8",
-    openSlot: "deployment-roov7f",
-} as const
+// A stable, in-memory deployment scenario from the logic submodule's own test suite: Lini
+// (leader) is locked to a LEADER coordinate, Vale is locked to a SPECIFIC_SQUADDIE coordinate,
+// one NONE-type coordinate is left open, and Otto and Zaya are the unplaced eligible squaddies
+// (in that order) for it. Unlike the on-disk campaignData folder, this can't drift out from
+// under the CLI's tests.
+export const LockedDeploymentIds = CampaignTestHarnessWithLockedDeploymentIds
 
-// Builds the targetPractice MissionEngine with its campaign army wired in, exactly as
-// index.ts does for folder-based missions.
-export const buildTargetPracticeEngine = (): MissionEngine => {
-    const armyManager = loadArmyFromFolder(targetPracticeCampaignFolderPath)
-    const engine = new MissionEngine(new MissionManager({ armyManager }))
-    const result = loadMissionFromFolder(
-        engine,
-        targetPracticeCampaignFolderPath,
-        targetPracticeMissionFolderPath
-    )
-    if (!result.isValid) {
-        throw new Error(
-            `[buildTargetPracticeEngine] fixture failed to load: ${result.errors.join("; ")}`
-        )
-    }
+// Builds the CampaignTestHarnessWithLockedDeployment engine and runs its default assignment
+// pass, exactly as index.ts does for folder-based missions via finalizeLoadingMission().
+export const buildLockedDeploymentEngine = (): MissionEngine => {
+    const engine = new CampaignTestHarnessWithLockedDeployment()
+    engine.finalizeLoadingMission()
     return engine
 }
 
@@ -83,7 +66,13 @@ export const TwoOpenCoordinatesIds = {
 // either locked-and-satisfied or still open, so a fixture with independently-movable occupied
 // coordinates plus a genuinely open one is needed to exercise move/swap without a lock rejecting
 // the mutation.
-export const buildEngineWithTwoOpenCoordinates = (): MissionEngine => {
+export const buildEngineWithTwoOpenCoordinates = ({
+    objectives = [],
+    movies = [],
+}: {
+    objectives?: MissionObjective[]
+    movies?: Movie[]
+} = {}): MissionEngine => {
     const armyManager = new ArmyManager(ArmyService.new())
     armyManager.addOrUpdate(
         CampaignSquaddieService.new({
@@ -177,6 +166,7 @@ export const buildEngineWithTwoOpenCoordinates = (): MissionEngine => {
         id: "two-open-coordinates-mission",
         mapId,
         campaignSquaddieDeploymentCoordinates: coordinateCollection,
+        objectives,
     })
 
     const missionManager = new MissionManager({
@@ -190,6 +180,11 @@ export const buildEngineWithTwoOpenCoordinates = (): MissionEngine => {
 
     const engine = new MissionEngine(missionManager)
     engine.finalizeLoadingMission()
+    // Only needs to happen before a TextMissionRunner is constructed against this engine
+    // (its constructor is what triggers objective rewards) -- position here is arbitrary.
+    for (const movie of movies) {
+        engine.registerMovie(movie)
+    }
     engine.deployCampaignSquaddie({
         coordinateId: TwoOpenCoordinatesIds.slotA,
         campaignSquaddieId: TwoOpenCoordinatesIds.alice,

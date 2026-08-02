@@ -6,9 +6,8 @@ import {
 } from "./deploymentCommandProcessor.js"
 import {
     buildEngineWithTwoOpenCoordinates,
-    buildTargetPracticeEngine,
-    TargetPracticeCampaignSquaddieIds,
-    TargetPracticeDeploymentCoordinateIds,
+    buildLockedDeploymentEngine,
+    LockedDeploymentIds,
     TwoOpenCoordinatesIds,
 } from "./testUtils/deploymentFixture.js"
 
@@ -19,7 +18,7 @@ const contextSelectingCoordinate = (coordinateId: string): DeploymentContext => 
 
 describe("processDeploymentCommand", () => {
     it("quits on Q", () => {
-        const engine = buildTargetPracticeEngine()
+        const engine = buildLockedDeploymentEngine()
 
         const result = processDeploymentCommand("Q", engine, initialDeploymentContext())
 
@@ -27,16 +26,16 @@ describe("processDeploymentCommand", () => {
     })
 
     it("shows the deployment map on M", () => {
-        const engine = buildTargetPracticeEngine()
+        const engine = buildLockedDeploymentEngine()
 
         const result = processDeploymentCommand("M", engine, initialDeploymentContext())
 
         expect(result.action).toBe("showMap")
-        expect(result.message).toContain("Target Practice")
+        expect(result.message).toContain(LockedDeploymentIds.mapName)
     })
 
     it("shows help text on ?", () => {
-        const engine = buildTargetPracticeEngine()
+        const engine = buildLockedDeploymentEngine()
 
         const result = processDeploymentCommand("?", engine, initialDeploymentContext())
 
@@ -45,37 +44,37 @@ describe("processDeploymentCommand", () => {
     })
 
     it("shows deployment status on W", () => {
-        const engine = buildTargetPracticeEngine()
+        const engine = buildLockedDeploymentEngine()
 
         const result = processDeploymentCommand("W", engine, initialDeploymentContext())
 
         expect(result.action).toBe("showStatus")
-        expect(result.message).toContain("Gloria")
+        expect(result.message).toContain("Otto")
     })
 
     describe("selecting a coordinate", () => {
         it("lists unplaced squaddies when selecting the open coordinate", () => {
-            const engine = buildTargetPracticeEngine()
+            const engine = buildLockedDeploymentEngine()
 
-            const result = processDeploymentCommand("3,0", engine, initialDeploymentContext())
+            const result = processDeploymentCommand("0,2", engine, initialDeploymentContext())
 
             expect(result.action).toBe("selectCoordinate")
-            expect(result.message).toContain("Gloria")
+            expect(result.message).toContain("Otto")
         })
 
         it("reports the occupying squaddie when selecting an already-assigned coordinate", () => {
-            const engine = buildTargetPracticeEngine()
+            const engine = buildLockedDeploymentEngine()
 
-            const result = processDeploymentCommand("1,1", engine, initialDeploymentContext())
+            const result = processDeploymentCommand("0,0", engine, initialDeploymentContext())
 
             expect(result.action).toBe("selectCoordinate")
-            expect(result.message).toContain("Teros")
+            expect(result.message).toContain("Lini")
         })
 
         it("reports an error for a coordinate that isn't a deployment slot", () => {
-            const engine = buildTargetPracticeEngine()
+            const engine = buildLockedDeploymentEngine()
 
-            const result = processDeploymentCommand("4,4", engine, initialDeploymentContext())
+            const result = processDeploymentCommand("9,9", engine, initialDeploymentContext())
 
             expect(result.action).toBe("echo")
             expect(result.message).toContain("not a deployment coordinate")
@@ -84,55 +83,55 @@ describe("processDeploymentCommand", () => {
 
     describe("selecting an unplaced squaddie by number", () => {
         it("selects the squaddie directly when nothing is selected yet", () => {
-            const engine = buildTargetPracticeEngine()
+            const engine = buildLockedDeploymentEngine()
 
             const result = processDeploymentCommand("1", engine, initialDeploymentContext())
 
             expect(result.action).toBe("selectSquaddie")
-            expect(result.message).toContain("Gloria selected")
+            expect(result.message).toContain("Otto selected")
         })
 
         it("deploys the selected squaddie once a coordinate is entered", () => {
-            const engine = buildTargetPracticeEngine()
+            const engine = buildLockedDeploymentEngine()
             const afterSelect = processDeploymentCommand("1", engine, initialDeploymentContext())
 
-            const result = processDeploymentCommand("3,0", engine, afterSelect.updatedContext!)
+            const result = processDeploymentCommand("0,2", engine, afterSelect.updatedContext!)
 
             expect(result.action).toBe("deploySquaddie")
-            expect(result.message).toContain("Gloria")
+            expect(result.message).toContain("Otto")
             expect(
                 engine.getCampaignDeploymentStatus().assignments[
-                    TargetPracticeDeploymentCoordinateIds.openSlot
+                    LockedDeploymentIds.openCoordinateId
                 ]?.id
-            ).toBe(TargetPracticeCampaignSquaddieIds.gloria)
+            ).toBe(LockedDeploymentIds.otto.campaignSquaddieId)
         })
 
         it("also deploys when the coordinate is selected before the squaddie number", () => {
-            const engine = buildTargetPracticeEngine()
-            const afterSelect = processDeploymentCommand("3,0", engine, initialDeploymentContext())
+            const engine = buildLockedDeploymentEngine()
+            const afterSelect = processDeploymentCommand("0,2", engine, initialDeploymentContext())
 
             const result = processDeploymentCommand("1", engine, afterSelect.updatedContext!)
 
             expect(result.action).toBe("deploySquaddie")
             expect(
                 engine.getCampaignDeploymentStatus().assignments[
-                    TargetPracticeDeploymentCoordinateIds.openSlot
+                    LockedDeploymentIds.openCoordinateId
                 ]?.id
-            ).toBe(TargetPracticeCampaignSquaddieIds.gloria)
+            ).toBe(LockedDeploymentIds.otto.campaignSquaddieId)
         })
 
         it("reports an error instead of deploying onto an already-occupied coordinate", () => {
-            const engine = buildTargetPracticeEngine()
+            const engine = buildLockedDeploymentEngine()
             const afterSelect = processDeploymentCommand("1", engine, initialDeploymentContext())
 
-            const result = processDeploymentCommand("1,1", engine, afterSelect.updatedContext!)
+            const result = processDeploymentCommand("0,0", engine, afterSelect.updatedContext!)
 
             expect(result.action).toBe("echo")
-            expect(result.message).toContain("already has Teros")
+            expect(result.message).toContain("already has Lini")
         })
 
         it("reports an error for an unknown squaddie number", () => {
-            const engine = buildTargetPracticeEngine()
+            const engine = buildLockedDeploymentEngine()
 
             const result = processDeploymentCommand("99", engine, initialDeploymentContext())
 
@@ -155,7 +154,7 @@ describe("processDeploymentCommand", () => {
         })
 
         it("requires a coordinate to be selected first", () => {
-            const engine = buildTargetPracticeEngine()
+            const engine = buildLockedDeploymentEngine()
 
             const result = processDeploymentCommand("X", engine, initialDeploymentContext())
 
@@ -164,10 +163,8 @@ describe("processDeploymentCommand", () => {
         })
 
         it("reports an error instead of unassigning a locked, satisfied coordinate", () => {
-            const engine = buildTargetPracticeEngine()
-            const context = contextSelectingCoordinate(
-                TargetPracticeDeploymentCoordinateIds.valeSpecificSlot
-            )
+            const engine = buildLockedDeploymentEngine()
+            const context = contextSelectingCoordinate(LockedDeploymentIds.vale.coordinateId)
 
             const result = processDeploymentCommand("X", engine, context)
 
@@ -175,9 +172,9 @@ describe("processDeploymentCommand", () => {
             expect(result.message).toContain("locked")
             expect(
                 engine.getCampaignDeploymentStatus().assignments[
-                    TargetPracticeDeploymentCoordinateIds.valeSpecificSlot
+                    LockedDeploymentIds.vale.coordinateId
                 ]?.id
-            ).toBe(TargetPracticeCampaignSquaddieIds.vale)
+            ).toBe(LockedDeploymentIds.vale.campaignSquaddieId)
         })
     })
 
@@ -213,12 +210,10 @@ describe("processDeploymentCommand", () => {
         })
 
         it("reports an error instead of moving a locked, satisfied coordinate away", () => {
-            const engine = buildTargetPracticeEngine()
-            const context = contextSelectingCoordinate(
-                TargetPracticeDeploymentCoordinateIds.terosLeaderSlot
-            )
+            const engine = buildLockedDeploymentEngine()
+            const context = contextSelectingCoordinate(LockedDeploymentIds.lini.leaderCoordinateId)
 
-            const result = processDeploymentCommand("2,3", engine, context)
+            const result = processDeploymentCommand("0,1", engine, context)
 
             expect(result.action).toBe("echo")
             expect(result.message).toContain("locked")
@@ -226,29 +221,30 @@ describe("processDeploymentCommand", () => {
     })
 
     describe("looking at a squaddie with L", () => {
-        it("shows the selected unplaced squaddie's stats and actions", () => {
-            const engine = buildTargetPracticeEngine()
+        it("shows the selected unplaced squaddie's stats", () => {
+            const engine = buildLockedDeploymentEngine()
             const afterSelect = processDeploymentCommand("1", engine, initialDeploymentContext())
 
             const result = processDeploymentCommand("L", engine, afterSelect.updatedContext!)
 
             expect(result.action).toBe("lookAtSquaddie")
-            expect(result.message).toContain("Gloria")
-            expect(result.message).toContain("Longsword")
+            expect(result.message).toContain("Otto")
+            expect(result.message).toContain("Max Hit Points:")
         })
 
-        it("shows the deployed squaddie's stats when its coordinate is selected", () => {
-            const engine = buildTargetPracticeEngine()
-            const afterSelect = processDeploymentCommand("1,1", engine, initialDeploymentContext())
+        it("shows the deployed squaddie's stats and actions when its coordinate is selected", () => {
+            const engine = buildLockedDeploymentEngine()
+            const afterSelect = processDeploymentCommand("0,0", engine, initialDeploymentContext())
 
             const result = processDeploymentCommand("L", engine, afterSelect.updatedContext!)
 
             expect(result.action).toBe("lookAtSquaddie")
-            expect(result.message).toContain("Teros")
+            expect(result.message).toContain("Lini")
+            expect(result.message).toContain("Scimitar")
         })
 
         it("requires a squaddie or coordinate to be selected first", () => {
-            const engine = buildTargetPracticeEngine()
+            const engine = buildLockedDeploymentEngine()
 
             const result = processDeploymentCommand("L", engine, initialDeploymentContext())
 
@@ -256,8 +252,8 @@ describe("processDeploymentCommand", () => {
         })
 
         it("reports that an open coordinate has nobody to inspect", () => {
-            const engine = buildTargetPracticeEngine()
-            const afterSelect = processDeploymentCommand("3,0", engine, initialDeploymentContext())
+            const engine = buildLockedDeploymentEngine()
+            const afterSelect = processDeploymentCommand("0,2", engine, initialDeploymentContext())
 
             const result = processDeploymentCommand("L", engine, afterSelect.updatedContext!)
 
@@ -268,7 +264,7 @@ describe("processDeploymentCommand", () => {
 
     describe("finalizing deployment", () => {
         it("finalizes deployment and places campaign squaddies on the map", () => {
-            const engine = buildTargetPracticeEngine()
+            const engine = buildLockedDeploymentEngine()
 
             const result = processDeploymentCommand("F", engine, initialDeploymentContext())
 

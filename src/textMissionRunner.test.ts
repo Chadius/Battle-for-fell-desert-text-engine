@@ -22,8 +22,10 @@ import { ResourceManifestEntryService } from "../logic/src/resource/resourceMani
 import { ResourceManifestCollectionService } from "../logic/src/resource/resourceManifestCollection.js"
 import {
     buildEngineWithFullyResolvedDeployment,
-    buildTargetPracticeEngine,
+    buildEngineWithTwoOpenCoordinates,
+    buildLockedDeploymentEngine,
 } from "./testUtils/deploymentFixture.js"
+import { glossaryManagerWith } from "./testUtils/glossaryFixture.js"
 
 // Single IMAGE-scene movie. Optional caption and resourceManifestEntryId control what the scene displays.
 const makeImageMovie = (opts: { caption?: string; resourceManifestEntryId?: string } = {}): Movie => ({
@@ -116,6 +118,23 @@ describe("TextMissionRunner", () => {
             const result = runner.processInput("Q")
             expect(result.shouldQuit).toBe(true)
             expect(result.text).toBe("Goodbye!")
+        })
+
+        it("resolves glossary terms for G when a glossaryManager was supplied to the runner", () => {
+            const engine = new MissionEngineTestHarness()
+            const glossaryManager = glossaryManagerWith([
+                {
+                    termId: "condition.ARMOR",
+                    type: "SQUADDIE_CONDITION_TYPE",
+                    name: "Armor",
+                    definition: "Reduces the chance you get hit.",
+                },
+            ])
+            const runner = new TextMissionRunner(engine, Date.now, glossaryManager)
+
+            const result = runner.processInput("G")
+
+            expect(result.text).toContain("Armor - Reduces the chance you get hit.")
         })
 
         it("returns shouldQuit false with map text for M", () => {
@@ -537,7 +556,7 @@ describe("TextMissionRunner", () => {
 
     describe("campaign squaddie deployment", () => {
         it("shows deployment status instead of the normal welcome/map while deployment is pending", () => {
-            const engine = buildTargetPracticeEngine()
+            const engine = buildLockedDeploymentEngine()
 
             const runner = new TextMissionRunner(engine)
 
@@ -546,7 +565,7 @@ describe("TextMissionRunner", () => {
         })
 
         it("does not place any squaddies on the map until deployment is finalized", () => {
-            const engine = buildTargetPracticeEngine()
+            const engine = buildLockedDeploymentEngine()
 
             new TextMissionRunner(engine)
 
@@ -554,16 +573,16 @@ describe("TextMissionRunner", () => {
         })
 
         it("shows deployment status when W is entered before deployment is finalized", () => {
-            const engine = buildTargetPracticeEngine()
+            const engine = buildLockedDeploymentEngine()
             const runner = new TextMissionRunner(engine)
 
             const result = runner.processInput("W")
 
-            expect(result.text).toContain("Gloria")
+            expect(result.text).toContain("Otto")
         })
 
         it("quits when Q is entered during deployment", () => {
-            const engine = buildTargetPracticeEngine()
+            const engine = buildLockedDeploymentEngine()
             const runner = new TextMissionRunner(engine)
 
             const result = runner.processInput("Q")
@@ -572,14 +591,14 @@ describe("TextMissionRunner", () => {
         })
 
         it("starts the mission once deployment is finalized", () => {
-            const engine = buildTargetPracticeEngine()
+            const engine = buildLockedDeploymentEngine()
             const runner = new TextMissionRunner(engine)
 
             runner.processInput("F")
 
             expect(engine.isCampaignSquaddieDeploymentInProgress()).toBe(false)
             expect(engine.getAllSquaddiePositions().length).toBeGreaterThan(0)
-            expect(runner.getMapText()).not.toContain("Deployment")
+            expect(runner.getMapText()).not.toContain("— Deployment")
         })
 
         it("auto-finalizes when every coordinate is already resolved and nothing is unplaced", () => {
@@ -590,6 +609,60 @@ describe("TextMissionRunner", () => {
             expect(engine.isCampaignSquaddieDeploymentInProgress()).toBe(false)
             expect(engine.getAllSquaddiePositions().length).toBe(1)
             expect(runner.getWelcomeText()).not.toContain("Deploy your squad")
+        })
+
+        describe("when a PLAY_MOVIE reward is satisfied before deployment begins", () => {
+            const buildEngineWithPreDeploymentMovie = () =>
+                buildEngineWithTwoOpenCoordinates({
+                    movies: [makeConversationMovie(["Welcome to the desert."])],
+                    objectives: [
+                        MissionObjectiveService.new({
+                            id: "pre-deployment-briefing",
+                            rewards: [
+                                MissionObjectiveRewardService.newPlayMovieReward(
+                                    "test-movie"
+                                ),
+                            ],
+                            criteria: [
+                                MissionObjectiveCriteriaService.newPhaseReachedCriteria(
+                                    {
+                                        turnCount: 0,
+                                        missionAffiliationTurn:
+                                            MissionAffiliationTurn.TURN_START,
+                                    }
+                                ),
+                            ],
+                        }),
+                    ],
+                })
+
+            it("shows the movie instead of the deployment screen", () => {
+                const engine = buildEngineWithPreDeploymentMovie()
+
+                const runner = new TextMissionRunner(engine)
+
+                expect(runner.getWelcomeText()).toContain("Welcome to the desert.")
+                expect(runner.getWelcomeText()).not.toContain("Deploy your squad")
+            })
+
+            it("routes input to the movie instead of deployment commands while it plays", () => {
+                const engine = buildEngineWithPreDeploymentMovie()
+                const runner = new TextMissionRunner(engine)
+
+                const result = runner.processInput("W")
+
+                expect(result.text).toContain("Welcome to the desert.")
+                expect(result.text).not.toContain("Alice")
+            })
+
+            it("shows the deployment screen once the movie finishes", () => {
+                const engine = buildEngineWithPreDeploymentMovie()
+                const runner = new TextMissionRunner(engine)
+
+                runner.processInput("")
+
+                expect(runner.getWelcomeText()).toContain("Deploy your squad")
+            })
         })
     })
 })

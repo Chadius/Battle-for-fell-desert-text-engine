@@ -5,6 +5,8 @@ import type { MissionEngine } from "../logic/src/mission/missionEngine/missionEn
 import { MovieCollectionLoader } from "./movieCollectionLoader.js"
 import { ArmyManager } from "../logic/src/campaign/army/armyManager.js"
 import { ArmyService } from "../logic/src/campaign/army/army.js"
+import { GlossaryManager } from "../logic/src/campaign/glossary/glossaryManager.js"
+import { GlossaryCollectionService } from "../logic/src/campaign/glossary/glossaryCollection.js"
 
 export const CAMPAIGN_DATA_FOLDER = "campaignData"
 export const CAMPAIGNS_SUBFOLDER = "campaigns"
@@ -75,8 +77,28 @@ export const loadArmyFromFolder = (campaignFolderPath: string): ArmyManager => {
     const errors = armyManager.addSquaddiesFromJson(rosterData)
     if (errors.length > 0) {
         console.warn(`[campaignLoader] Warnings loading ${armyPath}:`)
-        errors.forEach((e) => console.warn(` - ${e}`))
+        errors.forEach((error) => console.warn(` - ${error}`))
     }
 
     return armyManager
+}
+
+// Reads glossary.json from campaignFolderPath and builds a GlossaryManager of term definitions.
+// Returns an empty GlossaryManager if glossary.json does not exist (missions without a glossary
+// still play normally; the G command just has nothing to show).
+export const loadGlossaryFromFolder = (campaignFolderPath: string): GlossaryManager => {
+    const glossaryManager = new GlossaryManager(GlossaryCollectionService.new())
+
+    const glossaryPath = join(campaignFolderPath, "glossary.json")
+    if (!existsSync(glossaryPath)) return glossaryManager
+
+    const parsedGlossary = JSON.parse(readFileSync(glossaryPath, "utf-8"))
+    const termsData = parsedGlossary.data ?? parsedGlossary
+    const errors = glossaryManager.addTermsFromJson(termsData)
+    if (errors.length > 0) {
+        console.warn(`[campaignLoader] Warnings loading ${glossaryPath}:`)
+        errors.forEach((error) => console.warn(` - ${error}`))
+    }
+
+    return glossaryManager
 }

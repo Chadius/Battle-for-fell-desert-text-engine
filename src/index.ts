@@ -15,9 +15,12 @@ import {
     MISSIONS_SUBFOLDER,
     listAvailableMissions,
     loadArmyFromFolder,
+    loadGlossaryFromFolder,
     loadMissionFromFolder,
     loadMoviesFromFolder,
 } from "./campaignLoader.js"
+import { GlossaryManager } from "../logic/src/campaign/glossary/glossaryManager.js"
+import { GlossaryCollectionService } from "../logic/src/campaign/glossary/glossaryCollection.js"
 import { initLogger, appendLog } from "./logger.js"
 import { wrapLine } from "./terminalLayout.js"
 
@@ -102,26 +105,30 @@ async function promptMissionSelection(
 
 // Tries to load a mission from campaignData/campaigns/main/missions/. Falls back to the test
 // harness if the folder is absent or empty.
-async function selectAndLoadMission(rl: readline.Interface): Promise<MissionEngine> {
+async function selectAndLoadMission(
+    rl: readline.Interface
+): Promise<{ engine: MissionEngine; glossaryManager: GlossaryManager }> {
     const campaignDataPath = join(process.cwd(), CAMPAIGN_DATA_FOLDER)
     const campaignFolderPath = join(campaignDataPath, CAMPAIGNS_SUBFOLDER, MAIN_CAMPAIGN_FOLDER)
     const missionsPath = join(campaignFolderPath, MISSIONS_SUBFOLDER)
+    const createEmptyGlossaryManager = () => new GlossaryManager(GlossaryCollectionService.new())
 
     if (!existsSync(campaignDataPath)) {
         console.warn("[index] Warning: campaignData folder not found. Loading default test harness mission.")
-        return loadTestHarnessMission(rl)
+        return { engine: loadTestHarnessMission(rl), glossaryManager: createEmptyGlossaryManager() }
     }
 
     const missionNames = listAvailableMissions(missionsPath)
     if (missionNames.length === 0) {
         console.warn("[index] Warning: No missions found in campaignData/campaigns/test/missions. Loading default test harness mission.")
-        return loadTestHarnessMission(rl)
+        return { engine: loadTestHarnessMission(rl), glossaryManager: createEmptyGlossaryManager() }
     }
 
     const selected = await promptMissionSelection(rl, missionNames)
     const missionFolderPath = join(missionsPath, selected)
 
     const armyManager = loadArmyFromFolder(campaignFolderPath)
+    const glossaryManager = loadGlossaryFromFolder(campaignFolderPath)
     const engine = new MissionEngine(new MissionManager({ armyManager }))
     const result = loadMissionFromFolder(engine, campaignFolderPath, missionFolderPath)
     if (!result.isValid) {
@@ -132,7 +139,7 @@ async function selectAndLoadMission(rl: readline.Interface): Promise<MissionEngi
     }
     loadMoviesFromFolder(campaignFolderPath).forEach((movie) => engine.registerMovie(movie))
 
-    return engine
+    return { engine, glossaryManager }
 }
 
 // Calculates the column widths for the split layout based on current terminal dimensions.
@@ -235,7 +242,7 @@ const rl = readline.createInterface({
 
 const { debugFlagNames } = parseArgv(process.argv.slice(2))
 
-const engine = await selectAndLoadMission(rl)
+const { engine, glossaryManager } = await selectAndLoadMission(rl)
 rl.close()
 
 for (const flag of debugFlagNames) {
@@ -244,5 +251,5 @@ for (const flag of debugFlagNames) {
 
 initLogger(join(process.cwd(), "debug.log"))
 
-const runner = new TextMissionRunner(engine)
+const runner = new TextMissionRunner(engine, Date.now, glossaryManager)
 await gameLoop(runner)

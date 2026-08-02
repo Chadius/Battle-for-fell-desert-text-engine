@@ -16,6 +16,8 @@ import {ActionResultInspector} from "./actionResultInspector.js"
 import {OffsetCoordinate} from "../logic/src/coordinateMap/offsetCoordinate.js";
 import {CoordinateCalculator} from "../logic/src/coordinateMap/coordinateCalculator.js";
 import {CoordinateMapService} from "../logic/src/coordinateMap/coordinateMap.js";
+import type {GlossaryManager} from "../logic/src/campaign/glossary/glossaryManager.js";
+import {GlossaryInspector} from "./glossaryInspector.js";
 
 // Ordered list of all known debug flags. Index 1-based maps to DS <n> commands.
 // Append new flags here as they are added to DebugFlags.
@@ -58,6 +60,7 @@ export type CommandAction =
     | "undoAction"
     | "showDebugFlags"
     | "setDebugFlag"
+    | "showGlossary"
 
 export interface CommandContext {
     selectedSquaddieId: BattleSquaddieId | undefined
@@ -87,7 +90,8 @@ export interface CommandResult {
 export const processCommand = (
     rawInput: string,
     engine?: MissionEngine,
-    context?: CommandContext
+    context?: CommandContext,
+    glossaryManager?: GlossaryManager
 ): CommandResult => {
     const normalizedInput = rawInput.trim().toUpperCase()
 
@@ -117,6 +121,10 @@ export const processCommand = (
 
     if (normalizedInput === "O") {
         return handleShowObjectives(engine)
+    }
+
+    if (normalizedInput === "G") {
+        return handleShowGlossary(engine, context, glossaryManager)
     }
 
     if (normalizedInput === "Z") {
@@ -174,6 +182,9 @@ const handleShowCommands = (context?: CommandContext, engine?: MissionEngine): C
         commandList.push("L - Look at selected squaddie", "A - Select action")
     }
 
+    commandList.push(
+        "G - Show glossary terms (for selected squaddie, or all if none selected)"
+    )
     commandList.push("Z - Undo last action", "Q - Quit the game", "? - Show all commands")
     commandList.push("DF - Show debug flags", "DS <n> - Toggle debug flag by number")
 
@@ -1408,6 +1419,41 @@ const handleShowObjectives = (engine?: MissionEngine): CommandResult => {
     return {
         action: "showObjectives",
         message: message.length > 0 ? message : "No objectives.",
+    }
+}
+
+// Shows glossary terms relevant to the selected squaddie's conditions and actions, or every
+// known term when nothing is selected.
+const handleShowGlossary = (
+    engine: MissionEngine | undefined,
+    context: CommandContext | undefined,
+    glossaryManager: GlossaryManager | undefined
+): CommandResult => {
+    if (glossaryManager == undefined) {
+        return { action: "showGlossary", message: "No glossary available." }
+    }
+
+    if (engine == undefined) {
+        return {
+            action: "showGlossary",
+            message: "No engine available to show glossary terms.",
+        }
+    }
+
+    if (context?.selectedSquaddieId == undefined) {
+        return {
+            action: "showGlossary",
+            message: GlossaryInspector.allTermsListingText(glossaryManager),
+        }
+    }
+
+    const termIds = GlossaryInspector.reachableTermIds(
+        engine,
+        context.selectedSquaddieId
+    )
+    return {
+        action: "showGlossary",
+        message: GlossaryInspector.termIdsListingText(glossaryManager, termIds),
     }
 }
 

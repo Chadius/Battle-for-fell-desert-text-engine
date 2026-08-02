@@ -28,6 +28,7 @@ import {
     initialDeploymentContext,
     type DeploymentContext,
 } from "./deploymentCommandProcessor.js"
+import type { GlossaryManager } from "../logic/src/campaign/glossary/glossaryManager.js"
 
 const MAX_ADVANCEMENT_STEPS = 30
 
@@ -45,20 +46,30 @@ export class TextMissionRunner {
     private overlayMap: string | undefined = undefined
     private readonly decisionClock: DecisionClock
     private deploymentContext: DeploymentContext = initialDeploymentContext()
+    private readonly glossaryManager: GlossaryManager | undefined
 
-    constructor(engine: MissionEngine, now: () => number = Date.now) {
+    constructor(
+        engine: MissionEngine,
+        now: () => number = Date.now,
+        glossaryManager?: GlossaryManager
+    ) {
         this.engine = engine
         this.decisionClock = new DecisionClock(now)
+        this.glossaryManager = glossaryManager
         this.context = {
             selectedSquaddieId: undefined,
             interactionPhase: InteractionPhase.BROWSING,
             actingSquaddieId: undefined,
             pendingActionId: undefined,
         }
+        // Checked before deployment begins so a PLAY_MOVIE reward tied to the mission's very
+        // start (e.g. an intro cutscene) can fire before the deployment screen is ever shown.
+        this.engine.checkAndTriggerObjectiveRewards()
         this.autoFinalizeTrivialDeployment()
-        this.initialPhaseMessages = this.isInDeploymentPhase()
-            ? []
-            : this.advanceToInteractivePhase()
+        this.initialPhaseMessages =
+            this.isInDeploymentPhase() || this.engine.isMoviePlaying()
+                ? []
+                : this.advanceToInteractivePhase()
         this.syncDecisionClock()
     }
 
@@ -115,7 +126,9 @@ export class TextMissionRunner {
     getWelcomeText(): string {
         const summary = this.engine.getSerializedInMissionSummary()
 
-        if (this.isInDeploymentPhase()) {
+        // A PLAY_MOVIE reward may fire before deployment begins (e.g. an intro cutscene) —
+        // give it priority over the deployment screen while it's playing.
+        if (this.isInDeploymentPhase() && !this.engine.isMoviePlaying()) {
             return [
                 "Battle of Fell Desert CLI",
                 "=========================",
@@ -334,15 +347,22 @@ export class TextMissionRunner {
     }
 
     private processInputAndAdvance(input: string): ProcessInputResult {
-        if (this.isInDeploymentPhase()) {
-            return this.processDeploymentInput(input)
-        }
-
+        // A pre-deployment PLAY_MOVIE reward can leave a movie playing while deployment is
+        // still technically in progress — the movie must take input priority in that case.
         if (this.engine.isMoviePlaying()) {
             return this.processMovieInput(input)
         }
 
-        const result = processCommand(input, this.engine, this.context)
+        if (this.isInDeploymentPhase()) {
+            return this.processDeploymentInput(input)
+        }
+
+        const result = processCommand(
+            input,
+            this.engine,
+            this.context,
+            this.glossaryManager
+        )
 
         if (result.updatedContext != undefined) {
             this.context = result.updatedContext

@@ -18,6 +18,7 @@ import {
     createMovementMissionEngine,
     MovementTestMissionIds,
 } from "./testUtils/movementTestMission.js"
+import { glossaryManagerWith } from "./testUtils/glossaryFixture.js"
 
 describe("processCommand", () => {
     describe("quit action", () => {
@@ -99,6 +100,11 @@ describe("processCommand", () => {
         it("shows O command in help text", () => {
             const result = processCommand("?")
             expect(result.message).toContain("O - Show objectives")
+        })
+
+        it("shows G command in help text", () => {
+            const result = processCommand("?")
+            expect(result.message).toContain("G - Show glossary terms")
         })
 
         it("shows turn flow explanation in help text", () => {
@@ -408,6 +414,66 @@ describe("processCommand", () => {
             expect(result.message).toContain("- Defeat enemy:")
             expect(result.message).toContain("Failure:")
             expect(result.message).toContain("- Defeat players:")
+        })
+    })
+
+    describe("showGlossary action", () => {
+        it("returns showGlossary action for G command", () => {
+            const { engine } = createSimplePlayerVsEnemyMission()
+            const result = processCommand("G", engine, undefined, glossaryManagerWith([]))
+            expect(result.action).toBe("showGlossary")
+        })
+
+        it("reports no glossary available when no GlossaryManager is supplied", () => {
+            const { engine } = createSimplePlayerVsEnemyMission()
+            const result = processCommand("G", engine)
+            expect(result.message).toBe("No glossary available.")
+        })
+
+        it("reports no engine available when no MissionEngine is supplied", () => {
+            const result = processCommand("G", undefined, undefined, glossaryManagerWith([]))
+            expect(result.message).toBe("No engine available to show glossary terms.")
+        })
+
+        it("lists every known term when no squaddie is selected", () => {
+            const glossaryManager = glossaryManagerWith([
+                {
+                    termId: "condition.ARMOR",
+                    type: "SQUADDIE_CONDITION_TYPE",
+                    name: "Armor",
+                    definition: "Reduces hit chance.",
+                },
+            ])
+            const { engine } = createSimplePlayerVsEnemyMission()
+            const result = processCommand("G", engine, undefined, glossaryManager)
+            expect(result.message).toContain("Armor - Reduces hit chance.")
+        })
+
+        it("lists only terms reachable from the selected squaddie", () => {
+            const glossaryManager = glossaryManagerWith([
+                {
+                    termId: "condition.ARMOR",
+                    type: "SQUADDIE_CONDITION_TYPE",
+                    name: "Armor",
+                    definition: "Reduces hit chance.",
+                },
+                {
+                    termId: "condition.HUSTLE",
+                    type: "SQUADDIE_CONDITION_TYPE",
+                    name: "Hustle",
+                    definition: "Cheaper movement.",
+                },
+            ])
+            // Vale (actorId) starts with a permanent HUSTLE condition; Armor is unrelated to her.
+            const { engine, actorId } = createLineActionMission()
+            const context: CommandContext = {
+                selectedSquaddieId: actorId,
+                interactionPhase: InteractionPhase.BROWSING,
+                actingSquaddieId: undefined,
+            }
+            const result = processCommand("G", engine, context, glossaryManager)
+            expect(result.message).toContain("Hustle - Cheaper movement.")
+            expect(result.message).not.toContain("Armor")
         })
     })
 

@@ -1,54 +1,51 @@
 import { describe, it, expect } from "vitest"
 import { DeploymentInspector } from "./deploymentInspector.js"
-import {
-    buildTargetPracticeEngine,
-    TargetPracticeDeploymentCoordinateIds,
-} from "./testUtils/deploymentFixture.js"
+import { buildLockedDeploymentEngine, LockedDeploymentIds } from "./testUtils/deploymentFixture.js"
 
 describe("DeploymentInspector", () => {
     describe("formatStatus", () => {
         it("lists every deployment coordinate along with its default assignment", () => {
-            const engine = buildTargetPracticeEngine()
+            const engine = buildLockedDeploymentEngine()
 
             const status = DeploymentInspector.formatStatus(engine)
 
-            expect(status).toContain(TargetPracticeDeploymentCoordinateIds.terosLeaderSlot)
-            expect(status).toContain("Teros")
-            expect(status).toContain(TargetPracticeDeploymentCoordinateIds.valeSpecificSlot)
+            expect(status).toContain(LockedDeploymentIds.lini.leaderCoordinateId)
+            expect(status).toContain("Lini")
+            expect(status).toContain(LockedDeploymentIds.vale.coordinateId)
             expect(status).toContain("Vale")
-            expect(status).toContain(TargetPracticeDeploymentCoordinateIds.openSlot)
+            expect(status).toContain(LockedDeploymentIds.openCoordinateId)
             expect(status).toContain("(open)")
         })
 
-        it("lists Gloria as unplaced since her coordinate has no request", () => {
-            const engine = buildTargetPracticeEngine()
+        it("lists Otto as unplaced since his coordinate has no request", () => {
+            const engine = buildLockedDeploymentEngine()
 
             const status = DeploymentInspector.formatStatus(engine)
 
             expect(status).toContain("Unplaced squaddies:")
-            expect(status).toContain("Gloria")
+            expect(status).toContain("Otto")
         })
 
         it("marks locked coordinates", () => {
-            const engine = buildTargetPracticeEngine()
+            const engine = buildLockedDeploymentEngine()
 
             const status = DeploymentInspector.formatStatus(engine)
-            const terosLine = status
+            const leaderLine = status
                 .split("\n")
-                .find((line) => line.includes(TargetPracticeDeploymentCoordinateIds.terosLeaderSlot))
+                .find((line) => line.includes(LockedDeploymentIds.lini.leaderCoordinateId))
 
-            expect(terosLine).toContain("[locked]")
+            expect(leaderLine).toContain("[locked]")
         })
     })
 
     describe("renderDeploymentMap", () => {
         it("includes the map name and a marker for each assigned coordinate", () => {
-            const engine = buildTargetPracticeEngine()
+            const engine = buildLockedDeploymentEngine()
 
             const mapText = DeploymentInspector.renderDeploymentMap(engine)
 
-            expect(mapText).toContain("Target Practice")
-            expect(mapText).toContain("TE") // Teros
+            expect(mapText).toContain(LockedDeploymentIds.mapName)
+            expect(mapText).toContain("LI") // Lini
             expect(mapText).toContain("VA") // Vale
             expect(mapText).toContain("??") // open coordinate
         })
@@ -56,27 +53,25 @@ describe("DeploymentInspector", () => {
 
     describe("formatCampaignSquaddieDetails", () => {
         it("shows the squaddie's max hit points and action list", () => {
-            const engine = buildTargetPracticeEngine()
-            const gloria = engine
-                .getCampaignDeploymentStatus()
-                .unplacedEligibleCampaignSquaddies.find(
-                    (squaddie) => squaddie.name === "Gloria"
-                )!
+            const engine = buildLockedDeploymentEngine()
+            const lini = engine.getCampaignDeploymentStatus().assignments[
+                LockedDeploymentIds.lini.leaderCoordinateId
+            ]
 
-            const details = DeploymentInspector.formatCampaignSquaddieDetails(engine, gloria)
+            const details = DeploymentInspector.formatCampaignSquaddieDetails(engine, lini)
 
-            expect(details).toContain("Gloria")
+            expect(details).toContain("Lini")
             expect(details).toContain("Max Hit Points:")
-            expect(details).toContain("Longsword")
+            expect(details).toContain("Scimitar")
         })
 
         it("marks the squaddie as Leader when applicable", () => {
-            const engine = buildTargetPracticeEngine()
-            const teros = Object.values(engine.getCampaignDeploymentStatus().assignments).find(
-                (squaddie) => squaddie.name === "Teros"
-            )!
+            const engine = buildLockedDeploymentEngine()
+            const lini = engine.getCampaignDeploymentStatus().assignments[
+                LockedDeploymentIds.lini.leaderCoordinateId
+            ]
 
-            const details = DeploymentInspector.formatCampaignSquaddieDetails(engine, teros)
+            const details = DeploymentInspector.formatCampaignSquaddieDetails(engine, lini)
 
             expect(details).toContain("(Leader)")
         })

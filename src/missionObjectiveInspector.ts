@@ -6,11 +6,14 @@ import type {
     AllSquaddiesDefeatedCriteria,
     SpecificSquaddiesInjuredCriteria,
     SpecificSquaddiesDefeatedCriteria,
+    PhaseReachedCriteria,
+    MissionObjectiveCriteria,
 } from "../logic/src/mission/missionObjectiveCriteria.js"
 import {
     SquaddieAffiliation,
     type TSquaddieAffiliation,
 } from "../logic/src/affiliation/affiliation.js"
+import { missionAffiliationTurnDisplayNames } from "./missionPhaseDisplayNames.js"
 
 export interface MissionObjectiveDisplayEntry {
     description: string
@@ -100,24 +103,52 @@ const specificDefeatedCriteriaDescription = (
     return ids.length > 0 ? `Defeat specific: ${ids.join(", ")}` : "Defeat a specific squaddie"
 }
 
+const armyLeaderDefeatedCriteriaDescription = (): string => "Defeat the army leader"
+
+const phaseReachedCriteriaDescription = (
+    criteria: PhaseReachedCriteria
+): string => {
+    const phaseName =
+        missionAffiliationTurnDisplayNames[criteria.missionAffiliationTurn] ??
+        criteria.missionAffiliationTurn
+    return `Reach turn ${criteria.turnCount} (${phaseName})`
+}
+
+// The switch's `default` case assigns `criterion` to a `never`-typed variable, so adding a
+// new MissionObjectiveCriteriaType without a matching case here is a compile error rather
+// than a silently empty description.
+const criteriaDescription = (
+    engine: MissionEngine,
+    criterion: MissionObjectiveCriteria
+): string => {
+    switch (criterion.type) {
+        case MissionObjectiveCriteriaType.ALL_SQUADDIES_DEFEATED:
+            return buildCriteriaDescription(engine, criterion)
+        case MissionObjectiveCriteriaType.SPECIFIC_SQUADDIES_INJURED:
+            return injuredCriteriaDescription(criterion)
+        case MissionObjectiveCriteriaType.SPECIFIC_SQUADDIES_DEFEATED:
+            return specificDefeatedCriteriaDescription(criterion)
+        case MissionObjectiveCriteriaType.ARMY_LEADER_DEFEATED:
+            return armyLeaderDefeatedCriteriaDescription()
+        case MissionObjectiveCriteriaType.PHASE_REACHED:
+            return phaseReachedCriteriaDescription(criterion)
+        default: {
+            const unhandledCriteria: never = criterion
+            throw new Error(
+                `[criteriaDescription]: unhandled criteria type: ${JSON.stringify(unhandledCriteria)}`
+            )
+        }
+    }
+}
+
 const objectiveToEntry = (
     engine: MissionEngine,
     objective: MissionObjective,
     isCompleted: boolean
 ): MissionObjectiveDisplayEntry => {
-    const descriptions: string[] = []
-
-    for (const criterion of objective.criteria) {
-        if (criterion.type === MissionObjectiveCriteriaType.ALL_SQUADDIES_DEFEATED) {
-            descriptions.push(buildCriteriaDescription(engine, criterion))
-        }
-        if (criterion.type === MissionObjectiveCriteriaType.SPECIFIC_SQUADDIES_INJURED) {
-            descriptions.push(injuredCriteriaDescription(criterion))
-        }
-        if (criterion.type === MissionObjectiveCriteriaType.SPECIFIC_SQUADDIES_DEFEATED) {
-            descriptions.push(specificDefeatedCriteriaDescription(criterion))
-        }
-    }
+    const descriptions = objective.criteria.map((criterion) =>
+        criteriaDescription(engine, criterion)
+    )
 
     return {
         description: descriptions.join("; "),

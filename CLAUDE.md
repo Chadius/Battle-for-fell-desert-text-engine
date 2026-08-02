@@ -107,3 +107,5 @@ Use one `describe` block, usually with the name of the object/class under test. 
 Try to avoid mocking objects if possible. I'd rather you make simple and specific examples of underlying objects
 and make large test files. Mocked objects break when the functions change. You can also make test classes and test
 objects as needed.
+
+Before making a commit, run all unit tests and make sure none of them fail. Do not make a commit with failing unit tests to the main branch unless specifically instructed. 

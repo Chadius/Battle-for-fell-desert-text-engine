@@ -5,6 +5,8 @@ import type { MissionObjectiveDisplayEntry } from "./missionObjectiveInspector.j
 import { MissionObjectiveService } from "../logic/src/mission/missionObjective.js"
 import { MissionObjectiveRewardService } from "../logic/src/mission/missionObjectiveReward.js"
 import { MissionObjectiveCriteriaService } from "../logic/src/mission/missionObjectiveCriteria.js"
+import type { MissionObjectiveCriteria } from "../logic/src/mission/missionObjectiveCriteria.js"
+import { MissionAffiliationTurn } from "../logic/src/mission/missionTurn.js"
 
 const newObjective = (hidden?: boolean) =>
     MissionObjectiveService.new({
@@ -48,6 +50,41 @@ describe("MissionObjectiveInspector", () => {
             expect(defeatPlayerEntry!.isCompleted).toBe(false)
         })
 
+        it("shows an objective to defeat the enemy's army leader", () => {
+            const engine = new MissionEngineTestHarness()
+            addCriteriaObjective(engine, [
+                MissionObjectiveCriteriaService.newArmyLeaderDefeatedCriteria(),
+            ])
+
+            const entries = MissionObjectiveInspector.gatherEntries(engine)
+
+            const leaderEntry = entries.find((e) =>
+                e.description.includes("army leader")
+            )
+            expect(leaderEntry).toBeDefined()
+            expect(leaderEntry!.description).toContain("Defeat the army leader")
+        })
+
+        it("shows an objective to reach turn 5 during the player's turn", () => {
+            const engine = new MissionEngineTestHarness()
+            addCriteriaObjective(engine, [
+                MissionObjectiveCriteriaService.newPhaseReachedCriteria({
+                    turnCount: 5,
+                    missionAffiliationTurn: MissionAffiliationTurn.PLAYER_TURN,
+                }),
+            ])
+
+            const entries = MissionObjectiveInspector.gatherEntries(engine)
+
+            const phaseEntry = entries.find((e) =>
+                e.description.includes("Reach turn")
+            )
+            expect(phaseEntry).toBeDefined()
+            expect(phaseEntry!.description).toContain(
+                "Reach turn 5 (Player Turn)"
+            )
+        })
+
         it("still shows ordinary (non-hidden) objectives when revealHiddenMissionObjectives is on", () => {
             const engine = new MissionEngineTestHarness()
             engine.setDebugFlag("revealHiddenMissionObjectives", true)
@@ -58,6 +95,21 @@ describe("MissionObjectiveInspector", () => {
             ).toBe(true)
         })
     })
+
+    // Adds an objective with the given criteria to the engine, using placeholder
+    // id/reward values that are incidental to the tests exercising criteria descriptions.
+    function addCriteriaObjective(
+        engine: MissionEngineTestHarness,
+        criteria: MissionObjectiveCriteria[]
+    ) {
+        engine.addObjective(
+            MissionObjectiveService.new({
+                id: "test-added-objective",
+                rewards: [MissionObjectiveRewardService.newMissionEndsReward()],
+                criteria,
+            })
+        )
+    }
 
     describe("isObjectiveVisible", () => {
         it("hides a hidden objective when revealHiddenMissionObjectives is off", () => {
