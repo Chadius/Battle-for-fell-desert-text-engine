@@ -365,9 +365,9 @@ describe("processCommand", () => {
             const { engine } = createSimplePlayerVsEnemyMission()
             const result = processCommand("M", engine)
             expect(result.message).toContain("  Player:")
-            expect(result.message).toContain("    L = lini")
+            expect(result.message).toContain("    Li = lini")
             expect(result.message).toContain("  Enemy:")
-            expect(result.message).toContain("    S = slither-demon")
+            expect(result.message).toContain("    Sl = slither-demon")
         })
 
         it("includes objectives in map output", () => {

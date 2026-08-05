@@ -74,14 +74,18 @@ const formatStatus = (engine: MissionEngine): string => {
     return lines.join("\n")
 }
 
-// Two-letter marker for a placed squaddie ("??" for a still-open coordinate).
+// Two-letter marker for a placed squaddie ("??" for a still-open coordinate). Capital first
+// letter + lowercase second letter (e.g. "Si" for Sir Camil) so two squaddies whose names start
+// with the same letter remain visually distinct.
 const overlayMarkerForCoordinate = (
     coordinate: CampaignSquaddieDeploymentCoordinate,
     status: DeploymentStatus
 ): string => {
     const assigned = status.assignments[coordinate.id]
     if (assigned == undefined) return "??"
-    return assigned.name.slice(0, 2).toUpperCase()
+    const first = assigned.name[0]?.toUpperCase() ?? ""
+    const second = (assigned.name[1] ?? "").toLowerCase()
+    return `${first}${second}`
 }
 
 const buildMapOverlay = (engine: MissionEngine): Map<string, string> => {

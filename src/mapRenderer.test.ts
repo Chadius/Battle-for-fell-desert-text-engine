@@ -56,7 +56,7 @@ describe("mapRenderer", () => {
     })
 
     describe("buildSquaddieLabels", () => {
-        it("uses first character of outOfBattleSquaddieId uppercased", () => {
+        it("uses a Capital + lowercase two-character label by default", () => {
             const overview: MapOverview = {
                 width: 2,
                 height: 1,
@@ -91,10 +91,10 @@ describe("mapRenderer", () => {
                         inBattleSquaddieId: 0,
                     })
                 )
-            ).toBe("L")
+            ).toBe("Li")
         })
 
-        it("disambiguates squaddies that share a first letter", () => {
+        it("keeps default labels distinct when squaddies share a first letter but not a second", () => {
             const overview: MapOverview = {
                 width: 2,
                 height: 1,
@@ -137,12 +137,109 @@ describe("mapRenderer", () => {
                     inBattleSquaddieId: 1,
                 })
             )!
-            expect(liniLabel).not.toBe(largoLabel)
-            expect(liniLabel.length).toBeGreaterThanOrEqual(1)
-            expect(largoLabel.length).toBeGreaterThanOrEqual(1)
+            expect(liniLabel).toBe("Li")
+            expect(largoLabel).toBe("La")
         })
 
-        it("assigns distinct labels to multiple squaddies with the same outOfBattleSquaddieId", () => {
+        it("finds a distinguishing character when two archetypes share their default label", () => {
+            const overview: MapOverview = {
+                width: 2,
+                height: 1,
+                tiles: [
+                    [
+                        {
+                            row: 0,
+                            col: 0,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: {
+                                outOfBattleSquaddieId: "sir_camil",
+                                inBattleSquaddieId: 0,
+                            },
+                        },
+                        {
+                            row: 0,
+                            col: 1,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: {
+                                outOfBattleSquaddieId: "enemy_demon_slither",
+                                inBattleSquaddieId: 1,
+                            },
+                        },
+                    ],
+                ],
+            }
+
+            const labels = buildSquaddieLabels(overview)
+            const sirCamilLabel = labels.get(
+                SquaddieIdConverterService.squaddieIdToKey({
+                    outOfBattleSquaddieId: "sir_camil",
+                    inBattleSquaddieId: 0,
+                })
+            )!
+            const slitherLabel = labels.get(
+                SquaddieIdConverterService.squaddieIdToKey({
+                    outOfBattleSquaddieId: "enemy_demon_slither",
+                    inBattleSquaddieId: 1,
+                })
+            )!
+            // Sir Camil is never grouped with Slither Demon (their default labels "Si"/"En"
+            // already differ), so both keep their plain two-character labels.
+            expect(sirCamilLabel).toBe("Si")
+            expect(slitherLabel).toBe("En")
+        })
+
+        it("disambiguates two archetypes that share the same default label", () => {
+            const overview: MapOverview = {
+                width: 2,
+                height: 1,
+                tiles: [
+                    [
+                        {
+                            row: 0,
+                            col: 0,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: {
+                                outOfBattleSquaddieId: "enemy_demon_slither",
+                                inBattleSquaddieId: 0,
+                            },
+                        },
+                        {
+                            row: 0,
+                            col: 1,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: {
+                                outOfBattleSquaddieId: "enemy_demon_locust",
+                                inBattleSquaddieId: 1,
+                            },
+                        },
+                    ],
+                ],
+            }
+
+            const labels = buildSquaddieLabels(overview)
+            const slitherLabel = labels.get(
+                SquaddieIdConverterService.squaddieIdToKey({
+                    outOfBattleSquaddieId: "enemy_demon_slither",
+                    inBattleSquaddieId: 0,
+                })
+            )!
+            const locustLabel = labels.get(
+                SquaddieIdConverterService.squaddieIdToKey({
+                    outOfBattleSquaddieId: "enemy_demon_locust",
+                    inBattleSquaddieId: 1,
+                })
+            )!
+            // Both default to "En" ("enemy_demon_..."); the first point where the ids differ
+            // is where "slither" and "locust" begin, so that character replaces the second.
+            expect(slitherLabel).toBe("Es")
+            expect(locustLabel).toBe("El")
+        })
+
+        it("assigns distinct letter+number labels to multiple squaddies with the same outOfBattleSquaddieId", () => {
             const overview: MapOverview = {
                 width: 4,
                 height: 1,
@@ -201,7 +298,80 @@ describe("mapRenderer", () => {
                     })
                 )
             )
-            expect(allLabels).toEqual(["S0", "S1", "S2", "S3"])
+            expect(allLabels).toEqual(["S1", "S2", "S3", "S4"])
+        })
+
+        it("uses the distinguishing letter for letter+number labels when archetypes collide", () => {
+            const overview: MapOverview = {
+                width: 4,
+                height: 1,
+                tiles: [
+                    [
+                        {
+                            row: 0,
+                            col: 0,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: {
+                                outOfBattleSquaddieId: "enemy_demon_slither",
+                                inBattleSquaddieId: 0,
+                            },
+                        },
+                        {
+                            row: 0,
+                            col: 1,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: {
+                                outOfBattleSquaddieId: "enemy_demon_slither",
+                                inBattleSquaddieId: 1,
+                            },
+                        },
+                        {
+                            row: 0,
+                            col: 2,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: {
+                                outOfBattleSquaddieId: "enemy_demon_locust",
+                                inBattleSquaddieId: 2,
+                            },
+                        },
+                        {
+                            row: 0,
+                            col: 3,
+                            movementCost: 1,
+                            canStop: true,
+                            squaddieId: {
+                                outOfBattleSquaddieId: "enemy_demon_locust",
+                                inBattleSquaddieId: 3,
+                            },
+                        },
+                    ],
+                ],
+            }
+
+            const labels = buildSquaddieLabels(overview)
+            const slitherLabels = [0, 1].map(
+                (id) =>
+                    labels.get(
+                        SquaddieIdConverterService.squaddieIdToKey({
+                            outOfBattleSquaddieId: "enemy_demon_slither",
+                            inBattleSquaddieId: id,
+                        })
+                    )!
+            )
+            const locustLabels = [2, 3].map(
+                (id) =>
+                    labels.get(
+                        SquaddieIdConverterService.squaddieIdToKey({
+                            outOfBattleSquaddieId: "enemy_demon_locust",
+                            inBattleSquaddieId: id,
+                        })
+                    )!
+            )
+            expect(slitherLabels).toEqual(["S1", "S2"])
+            expect(locustLabels).toEqual(["L1", "L2"])
         })
     })
 
@@ -308,7 +478,7 @@ describe("mapRenderer", () => {
             }
 
             const output = renderMap(overview)
-            expect(output).toContain("L . S")
+            expect(output).toContain("Li . Sl")
         })
 
         it("indents odd rows by 1 space for hex offset rendering", () => {
@@ -423,8 +593,8 @@ describe("mapRenderer", () => {
 
             const output = renderMap(overview)
             expect(output).toContain("Squaddies:")
-            expect(output).toContain("L = lini (0,0)")
-            expect(output).toContain("S = slither-demon (0,1)")
+            expect(output).toContain("Li = lini (0,0)")
+            expect(output).toContain("Sl = slither-demon (0,1)")
         })
 
         it("renders the test harness map correctly", () => {
@@ -591,17 +761,17 @@ describe("mapRenderer", () => {
 
             const output = renderMap(overview)
             expect(output).toContain("Map: 5 columns x 4 rows")
-            expect(output).toContain("L = lini (0,0)")
-            expect(output).toContain("S = slither-demon (3,4)")
+            expect(output).toContain("Li = lini (0,0)")
+            expect(output).toContain("Sl = slither-demon (3,4)")
 
             const lines = output.split("\n")
             const headerIndex = lines.findIndex((line) =>
                 line.startsWith("Map:")
             )
-            expect(lines[headerIndex + 1]).toBe("L . ~ . .")
+            expect(lines[headerIndex + 1]).toBe("Li . ~ . .")
             expect(lines[headerIndex + 2]).toBe(" . _ . # .")
             expect(lines[headerIndex + 3]).toBe(". . . . ~")
-            expect(lines[headerIndex + 4]).toBe(" ~ . _ . S")
+            expect(lines[headerIndex + 4]).toBe(" ~ . _ . Sl")
         })
 
         it("shows turn header with affiliation phase when renderInfo is provided", () => {
@@ -704,9 +874,9 @@ describe("mapRenderer", () => {
             const output = renderMap(overview, renderInfo)
             expect(output).toContain("Squaddies:")
             expect(output).toContain("  Player:")
-            expect(output).toContain("    L = lini (0,0)")
+            expect(output).toContain("    Li = lini (0,0)")
             expect(output).toContain("  Enemy:")
-            expect(output).toContain("    S = slither-demon (0,1)")
+            expect(output).toContain("    Sl = slither-demon (0,1)")
         })
 
         it("shows only affiliations that have squaddies", () => {
@@ -821,8 +991,8 @@ describe("mapRenderer", () => {
 
             const output = renderMap(overview)
             expect(output).toContain("Squaddies:")
-            expect(output).toContain("  L = lini (0,0)")
-            expect(output).toContain("  S = slither-demon (0,1)")
+            expect(output).toContain("  Li = lini (0,0)")
+            expect(output).toContain("  Sl = slither-demon (0,1)")
             expect(output).not.toContain("  Player:")
             expect(output).not.toContain("  Enemy:")
         })

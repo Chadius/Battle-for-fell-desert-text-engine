@@ -36,10 +36,94 @@ export const terrainToSymbol = (
     return "#"
 }
 
-// SquaddiePair associates a unique composite key with the archetype name used for label generation.
+// SquaddiePair associates a unique composite key with the archetype id used for label generation.
 interface SquaddiePair {
     compositeKey: string
     outOfBattleId: string
+}
+
+// A single archetype's map label ("label", used when the archetype has exactly one instance
+// on the map) and the single character ("letter") used to build "letter + number" labels when
+// the archetype has multiple instances on the map.
+interface ArchetypeDiscriminator {
+    label: string
+    letter: string
+}
+
+// Capital first character + lowercase character at secondCharIndex, e.g. "Si" for "sir_camil".
+const twoCharLabel = (outOfBattleId: string, secondCharIndex: number): string => {
+    const first = outOfBattleId[0]?.toUpperCase() ?? ""
+    const second = (outOfBattleId[secondCharIndex] ?? "").toLowerCase()
+    return `${first}${second}`
+}
+
+// Finds the earliest character position (starting after the default second character) where
+// every id in the group differs from every other id in the group, or undefined if none exists
+// within the length of the longest id.
+const findDistinguishingCharIndex = (
+    outOfBattleIds: string[]
+): number | undefined => {
+    const maxLength = Math.max(...outOfBattleIds.map((id) => id.length))
+    for (let index = 1; index < maxLength; index++) {
+        const chars = outOfBattleIds.map((id) => (id[index] ?? "").toUpperCase())
+        if (new Set(chars).size === chars.length) {
+            return index
+        }
+    }
+    return undefined
+}
+
+// Assigns each distinct archetype (outOfBattleId) present on the map a label/letter pair.
+// Archetypes default to a two-character "Capital + lowercase" label. When two or more
+// archetypes would otherwise share the same default label (e.g. "enemy_demon_slither" and
+// "enemy_demon_locust" both default to "En"), a later character position that distinguishes
+// them is substituted for the second character instead.
+const assignArchetypeDiscriminators = (
+    outOfBattleIds: string[]
+): Map<string, ArchetypeDiscriminator> => {
+    const discriminators = new Map<string, ArchetypeDiscriminator>()
+
+    const byDefaultLabel = new Map<string, string[]>()
+    for (const outOfBattleId of outOfBattleIds) {
+        const defaultLabel = twoCharLabel(outOfBattleId, 1)
+        if (!byDefaultLabel.has(defaultLabel)) {
+            byDefaultLabel.set(defaultLabel, [])
+        }
+        byDefaultLabel.get(defaultLabel)!.push(outOfBattleId)
+    }
+
+    for (const group of byDefaultLabel.values()) {
+        if (group.length === 1) {
+            const outOfBattleId = group[0]
+            discriminators.set(outOfBattleId, {
+                label: twoCharLabel(outOfBattleId, 1),
+                letter: outOfBattleId[0].toUpperCase(),
+            })
+            continue
+        }
+
+        const distinguishingIndex = findDistinguishingCharIndex(group)
+        group.forEach((outOfBattleId, groupIndex) => {
+            if (distinguishingIndex != undefined) {
+                const distinguishingChar =
+                    outOfBattleId[distinguishingIndex]?.toUpperCase() ??
+                    outOfBattleId[0].toUpperCase()
+                discriminators.set(outOfBattleId, {
+                    label: twoCharLabel(outOfBattleId, distinguishingIndex),
+                    letter: distinguishingChar,
+                })
+            } else {
+                // No distinguishing character exists within either id (e.g. one is a prefix
+                // of the other); fall back to a numbered label within the group.
+                discriminators.set(outOfBattleId, {
+                    label: `${outOfBattleId[0].toUpperCase()}${groupIndex + 1}`,
+                    letter: outOfBattleId[0].toUpperCase(),
+                })
+            }
+        })
+    }
+
+    return discriminators
 }
 
 export const buildSquaddieLabels = (
@@ -60,65 +144,32 @@ export const buildSquaddieLabels = (
         }
     }
 
-    const labels = new Map<string, string>()
-
-    // Group pairs by the first character of their outOfBattleId.
-    const firstCharGroups = new Map<string, SquaddiePair[]>()
+    const archetypeGroups = new Map<string, SquaddiePair[]>()
     for (const pair of squaddiePairs) {
-        const firstChar = pair.outOfBattleId[0].toUpperCase()
-        if (!firstCharGroups.has(firstChar)) {
-            firstCharGroups.set(firstChar, [])
+        if (!archetypeGroups.has(pair.outOfBattleId)) {
+            archetypeGroups.set(pair.outOfBattleId, [])
         }
-        firstCharGroups.get(firstChar)!.push(pair)
+        archetypeGroups.get(pair.outOfBattleId)!.push(pair)
     }
 
-    for (const [firstChar, pairs] of firstCharGroups) {
+    const discriminators = assignArchetypeDiscriminators([
+        ...archetypeGroups.keys(),
+    ])
+
+    const labels = new Map<string, string>()
+    for (const [outOfBattleId, pairs] of archetypeGroups) {
+        const discriminator = discriminators.get(outOfBattleId)!
         if (pairs.length === 1) {
-            labels.set(pairs[0].compositeKey, firstChar)
+            labels.set(pairs[0].compositeKey, discriminator.label)
         } else {
-            assignDisambiguatedLabels(pairs, labels)
+            // Multiple instances of the same archetype: letter + 1-based instance number.
+            pairs.forEach((pair, index) => {
+                labels.set(pair.compositeKey, `${discriminator.letter}${index + 1}`)
+            })
         }
     }
 
     return labels
-}
-
-const assignDisambiguatedLabels = (
-    pairs: SquaddiePair[],
-    labels: Map<string, string>
-): void => {
-    // When any two pairs share the same outOfBattleId, character-position
-    // disambiguation is impossible — go straight to indexed fallback.
-    const outOfBattleIds = pairs.map((p) => p.outOfBattleId)
-    const hasDuplicateArchetypes =
-        new Set(outOfBattleIds).size < outOfBattleIds.length
-
-    if (!hasDuplicateArchetypes) {
-        // Try to find a character position where all outOfBattleIds differ.
-        for (let charIndex = 1; charIndex < 20; charIndex++) {
-            const candidateLabels = pairs.map((pair) => {
-                const char = pair.outOfBattleId[charIndex] ?? pair.outOfBattleId[0]
-                return char.toUpperCase()
-            })
-
-            const allUnique =
-                new Set(candidateLabels).size === candidateLabels.length
-            if (allUnique) {
-                for (let i = 0; i < pairs.length; i++) {
-                    labels.set(pairs[i].compositeKey, candidateLabels[i])
-                }
-                return
-            }
-        }
-    }
-
-    // Fallback: use first character of outOfBattleId plus a numeric index.
-    for (let i = 0; i < pairs.length; i++) {
-        labels.set(
-            pairs[i].compositeKey,
-            pairs[i].outOfBattleId[0].toUpperCase() + i
-        )
-    }
 }
 
 export const renderGridLines = (

@@ -45,8 +45,8 @@ describe("DeploymentInspector", () => {
             const mapText = DeploymentInspector.renderDeploymentMap(engine)
 
             expect(mapText).toContain(LockedDeploymentIds.mapName)
-            expect(mapText).toContain("LI") // Lini
-            expect(mapText).toContain("VA") // Vale
+            expect(mapText).toContain("Li") // Lini
+            expect(mapText).toContain("Va") // Vale
             expect(mapText).toContain("??") // open coordinate
         })
     })
