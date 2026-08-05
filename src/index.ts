@@ -23,7 +23,7 @@ import {
 import { GlossaryManager } from "../logic/src/campaign/glossary/glossaryManager.js"
 import { GlossaryCollectionService } from "../logic/src/campaign/glossary/glossaryCollection.js"
 import { initLogger, appendLog } from "./logger.js"
-import { wrapLine } from "./terminalLayout.js"
+import { layoutLeftPane, wrapLine } from "./terminalLayout.js"
 
 const term = termKit.terminal
 
@@ -202,10 +202,11 @@ const redrawScreen = (mapText: string, outputLines: string[]): void => {
 
     term.clear()
 
-    // Draw map lines into left pane
-    const mapLines = mapText.split("\n")
+    // Draw map lines into left pane. When the map text is taller than the pane, the grid stays
+    // intact from the top and the trailing content (legend/squaddie list/objectives) is replaced
+    // with a visible "... N more lines" indicator instead of silently disappearing off-screen.
+    const mapLines = layoutLeftPane(mapText, term.height - 1)
     mapLines.forEach((line, i) => {
-        if (i >= term.height - 1) return
         term.moveTo(1, i + 1)
         term(line.slice(0, leftWidth).padEnd(leftWidth, " "))
     })
