@@ -18,6 +18,7 @@ import { CoordinateMapCollectionService } from "../../logic/src/coordinateMap/co
 import { CoordinateMapService } from "../../logic/src/coordinateMap/coordinateMap.js"
 import { SquaddieActionManager } from "../../logic/src/squaddieAction/squaddieActionManager.js"
 import { SquaddieActionCollectionService } from "../../logic/src/squaddieAction/squaddieActionCollection.js"
+import { SquaddieActionService } from "../../logic/src/squaddieAction/squaddieAction.js"
 import { AttributeScore } from "../../logic/src/proficiency/attributeScore.js"
 import { SquaddieAffiliation } from "../../logic/src/affiliation/affiliation.js"
 import {
@@ -161,6 +162,9 @@ export const buildEngineWithTwoOpenCoordinates = ({
     })
 
     const squaddieActionManager = new SquaddieActionManager(SquaddieActionCollectionService.new())
+    SquaddieActionService.defaultActions().forEach((squaddieAction) =>
+        squaddieActionManager.addOrUpdate(squaddieAction)
+    )
 
     const missionState = MissionStateService.new({
         id: "two-open-coordinates-mission",
@@ -267,6 +271,9 @@ export const buildEngineWithFullyResolvedDeployment = (): MissionEngine => {
     })
 
     const squaddieActionManager = new SquaddieActionManager(SquaddieActionCollectionService.new())
+    SquaddieActionService.defaultActions().forEach((squaddieAction) =>
+        squaddieActionManager.addOrUpdate(squaddieAction)
+    )
 
     const missionState = MissionStateService.new({
         id: "fully-resolved-mission",
