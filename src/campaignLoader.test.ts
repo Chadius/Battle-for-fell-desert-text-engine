@@ -2,15 +2,54 @@ import { describe, it, expect, afterEach, vi } from "vitest"
 import { join } from "node:path"
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { listAvailableMissions, loadArmyFromFolder, loadGlossaryFromFolder, loadMissionFromFolder } from "./campaignLoader.js"
+import {
+    listAvailableCampaigns,
+    listAvailableMissions,
+    loadArmyFromFolder,
+    loadCampaignDisplayName,
+    loadGlossaryFromFolder,
+    loadMissionFromFolder,
+    loadMoviesFromFolder,
+} from "./campaignLoader.js"
 import { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
 import { TargetPracticeCampaignSquaddieIds } from "./testUtils/deploymentFixture.js"
 
-// campaignData/campaigns/test lives at the project root (one level above src/).
-const campaignFolderPath = join(process.cwd(), "campaignData", "campaigns", "test")
+// campaignData/campaigns lives at the project root (one level above src/).
+const campaignsPath = join(process.cwd(), "campaignData", "campaigns")
+const campaignFolderPath = join(campaignsPath, "test")
 const campaignMissionsPath = join(campaignFolderPath, "missions")
 
 describe("campaignLoader", () => {
+    describe("listAvailableCampaigns", () => {
+        it("returns a sorted list of campaign folder names", () => {
+            const campaigns = listAvailableCampaigns(campaignsPath)
+            expect(campaigns).toEqual([...campaigns].sort())
+        })
+
+        it("returns an empty array when the path does not exist", () => {
+            const campaigns = listAvailableCampaigns("/this/path/does/not/exist")
+            expect(campaigns).toEqual([])
+        })
+
+        it("includes the test and templeDefense campaigns", () => {
+            const campaigns = listAvailableCampaigns(campaignsPath)
+            expect(campaigns).toContain("test")
+            expect(campaigns).toContain("templeDefense")
+        })
+    })
+
+    describe("loadCampaignDisplayName", () => {
+        it("reads the en-US displayName from campaign.json", () => {
+            const displayName = loadCampaignDisplayName(campaignFolderPath, "test")
+            expect(displayName).toEqual("Main Campaign")
+        })
+
+        it("falls back to the folder name when campaign.json does not exist", () => {
+            const displayName = loadCampaignDisplayName("/this/path/does/not/exist", "test")
+            expect(displayName).toEqual("test")
+        })
+    })
+
     describe("listAvailableMissions", () => {
         it("returns a sorted list of mission folder names", () => {
             const missions = listAvailableMissions(campaignMissionsPath)
@@ -64,6 +103,31 @@ describe("campaignLoader", () => {
         it("returns an empty ArmyManager when army.json does not exist", () => {
             const armyManager = loadArmyFromFolder("/this/path/does/not/exist")
             expect(armyManager.getAll()).toEqual([])
+        })
+    })
+
+    describe("loadMoviesFromFolder", () => {
+        const templeDefenseFolderPath = join(campaignsPath, "templeDefense")
+        const templeDefenseMissionFolderPath = join(templeDefenseFolderPath, "missions", "0000")
+
+        it("reads movies defined at the campaign root", () => {
+            const movies = loadMoviesFromFolder(campaignFolderPath)
+            expect(movies.map((movie) => movie.id)).toContain("movie-testHarness-intro")
+        })
+
+        it("merges in movies defined in a mission's own movies.json", () => {
+            const movies = loadMoviesFromFolder(templeDefenseFolderPath, templeDefenseMissionFolderPath)
+            expect(movies.map((movie) => movie.id)).toContain("movie-temple-defense-introduction")
+        })
+
+        it("returns only campaign-root movies when no mission folder is given", () => {
+            const movies = loadMoviesFromFolder(templeDefenseFolderPath)
+            expect(movies.map((movie) => movie.id)).not.toContain("movie-temple-defense-introduction")
+        })
+
+        it("returns an empty array when neither movies.json exists", () => {
+            const movies = loadMoviesFromFolder("/this/path/does/not/exist")
+            expect(movies).toEqual([])
         })
     })
 

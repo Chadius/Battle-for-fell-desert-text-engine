@@ -10,7 +10,6 @@ import { GlossaryCollectionService } from "../logic/src/campaign/glossary/glossa
 
 export const CAMPAIGN_DATA_FOLDER = "campaignData"
 export const CAMPAIGNS_SUBFOLDER = "campaigns"
-export const MAIN_CAMPAIGN_FOLDER = "test"
 export const MISSIONS_SUBFOLDER = "missions"
 
 // Returns sorted list of mission folder names, or empty array if path doesn't exist.
@@ -22,6 +21,31 @@ export const listAvailableMissions = (missionsPath: string): string[] => {
         .filter((entry) => entry.isDirectory())
         .map((entry) => entry.name)
         .sort()
+}
+
+// Returns sorted list of campaign folder names, or empty array if path doesn't exist.
+export const listAvailableCampaigns = (campaignsPath: string): string[] => {
+    if (!existsSync(campaignsPath)) {
+        return []
+    }
+    return readdirSync(campaignsPath, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+        .sort()
+}
+
+// Reads campaign.json's displayName for the given locale. Falls back to folderName if
+// campaign.json is missing or has no displayName entry for that locale.
+export const loadCampaignDisplayName = (
+    campaignFolderPath: string,
+    folderName: string,
+    locale = "en-US"
+): string => {
+    const campaignJsonPath = join(campaignFolderPath, "campaign.json")
+    if (!existsSync(campaignJsonPath)) return folderName
+
+    const parsed = JSON.parse(readFileSync(campaignJsonPath, "utf-8"))
+    return parsed?.displayName?.[locale] ?? folderName
 }
 
 // Reads mission JSON files from missionFolderPath and campaign JSON files from campaignFolderPath,
@@ -54,13 +78,25 @@ export const loadMissionFromFolder = (
     return engine.finalizeLoadingMission()
 }
 
-// Reads movies.json from campaignFolderPath and returns the parsed movies.
-// Returns an empty array if movies.json does not exist.
-export const loadMoviesFromFolder = (campaignFolderPath: string): Movie[] => {
-    const moviesPath = join(campaignFolderPath, "movies.json")
-    if (!existsSync(moviesPath)) return []
-    const json = JSON.parse(readFileSync(moviesPath, "utf-8"))
-    return MovieCollectionLoader.loadFromJSON(json)
+// Reads movies.json from campaignFolderPath, and from missionFolderPath if given, and returns
+// the combined parsed movies. Missions can define their own movies.json for cutscenes that only
+// make sense within that mission, alongside campaign-wide movies (e.g. shared victory/defeat
+// scenes) defined at the campaign root. Returns an empty array if neither file exists.
+export const loadMoviesFromFolder = (
+    campaignFolderPath: string,
+    missionFolderPath?: string
+): Movie[] => {
+    const readMoviesFromFolder = (folderPath: string): Movie[] => {
+        const moviesPath = join(folderPath, "movies.json")
+        if (!existsSync(moviesPath)) return []
+        const json = JSON.parse(readFileSync(moviesPath, "utf-8"))
+        return MovieCollectionLoader.loadFromJSON(json)
+    }
+
+    return [
+        ...readMoviesFromFolder(campaignFolderPath),
+        ...(missionFolderPath ? readMoviesFromFolder(missionFolderPath) : []),
+    ]
 }
 
 // Reads army.json from campaignFolderPath and builds the persistent Campaign Army roster.

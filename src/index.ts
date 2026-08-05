@@ -11,10 +11,11 @@ import { DEBUG_FLAG_NAMES } from "./commandProcessor.js"
 import {
     CAMPAIGN_DATA_FOLDER,
     CAMPAIGNS_SUBFOLDER,
-    MAIN_CAMPAIGN_FOLDER,
     MISSIONS_SUBFOLDER,
+    listAvailableCampaigns,
     listAvailableMissions,
     loadArmyFromFolder,
+    loadCampaignDisplayName,
     loadGlossaryFromFolder,
     loadMissionFromFolder,
     loadMoviesFromFolder,
@@ -103,14 +104,46 @@ async function promptMissionSelection(
     })
 }
 
-// Tries to load a mission from campaignData/campaigns/main/missions/. Falls back to the test
-// harness if the folder is absent or empty.
+// Prompts the user to pick one of the listed campaign folders (shown by their campaign.json
+// displayName) and returns the chosen folder name.
+async function promptCampaignSelection(
+    rl: readline.Interface,
+    campaignsPath: string,
+    campaignFolderNames: string[]
+): Promise<string> {
+    const campaignLabels = campaignFolderNames.map((folderName) =>
+        loadCampaignDisplayName(join(campaignsPath, folderName), folderName)
+    )
+
+    return new Promise((resolve) => {
+        console.log("Available campaigns:")
+        campaignLabels.forEach((label, index) => {
+            console.log(`  ${index + 1}. ${label}`)
+        })
+
+        const ask = () => {
+            rl.question(`Select a campaign (1-${campaignFolderNames.length}): `, (answer) => {
+                const num = parseInt(answer.trim(), 10)
+                if (num >= 1 && num <= campaignFolderNames.length) {
+                    resolve(campaignFolderNames[num - 1])
+                } else {
+                    console.log(`Please enter a number between 1 and ${campaignFolderNames.length}.`)
+                    ask()
+                }
+            })
+        }
+        ask()
+    })
+}
+
+// Tries to load a mission from a campaign under campaignData/campaigns/. Prompts the user to
+// choose a campaign when more than one is available, then a mission within it. Falls back to
+// the test harness if no campaigns or missions are found.
 async function selectAndLoadMission(
     rl: readline.Interface
 ): Promise<{ engine: MissionEngine; glossaryManager: GlossaryManager }> {
     const campaignDataPath = join(process.cwd(), CAMPAIGN_DATA_FOLDER)
-    const campaignFolderPath = join(campaignDataPath, CAMPAIGNS_SUBFOLDER, MAIN_CAMPAIGN_FOLDER)
-    const missionsPath = join(campaignFolderPath, MISSIONS_SUBFOLDER)
+    const campaignsPath = join(campaignDataPath, CAMPAIGNS_SUBFOLDER)
     const createEmptyGlossaryManager = () => new GlossaryManager(GlossaryCollectionService.new())
 
     if (!existsSync(campaignDataPath)) {
@@ -118,9 +151,19 @@ async function selectAndLoadMission(
         return { engine: loadTestHarnessMission(rl), glossaryManager: createEmptyGlossaryManager() }
     }
 
+    const campaignFolderNames = listAvailableCampaigns(campaignsPath)
+    if (campaignFolderNames.length === 0) {
+        console.warn("[index] Warning: No campaigns found in campaignData/campaigns. Loading default test harness mission.")
+        return { engine: loadTestHarnessMission(rl), glossaryManager: createEmptyGlossaryManager() }
+    }
+
+    const selectedCampaignFolder = await promptCampaignSelection(rl, campaignsPath, campaignFolderNames)
+    const campaignFolderPath = join(campaignsPath, selectedCampaignFolder)
+    const missionsPath = join(campaignFolderPath, MISSIONS_SUBFOLDER)
+
     const missionNames = listAvailableMissions(missionsPath)
     if (missionNames.length === 0) {
-        console.warn("[index] Warning: No missions found in campaignData/campaigns/test/missions. Loading default test harness mission.")
+        console.warn(`[index] Warning: No missions found in campaignData/campaigns/${selectedCampaignFolder}/missions. Loading default test harness mission.`)
         return { engine: loadTestHarnessMission(rl), glossaryManager: createEmptyGlossaryManager() }
     }
 
@@ -137,7 +180,9 @@ async function selectAndLoadMission(
         rl.close()
         process.exit(1)
     }
-    loadMoviesFromFolder(campaignFolderPath).forEach((movie) => engine.registerMovie(movie))
+    loadMoviesFromFolder(campaignFolderPath, missionFolderPath).forEach((movie) =>
+        engine.registerMovie(movie)
+    )
 
     return { engine, glossaryManager }
 }
