@@ -150,10 +150,6 @@ beyond strictly turn-based (e.g., real-time movement previews, animated AI "thin
 
 ## Recommendation
 
-*(Superseded by the "new requirements" addendum below, and further reinforced by the viewport
-point above — kept for the reasoning trail.)* ~~Start with Approach A (DOM + SVG), treating it as
-a straight port, and migrate the map to Canvas later if the visual ambition outgrows flat SVG.~~
-
 Go straight to **Approach B (Canvas map + DOM chrome)**: keep
 `CommandContext`/`InteractionPhase`/`CommandProcessor` exactly as they are, write a
 `WebMissionRunner` that maps clicks to the same coordinate/command inputs the CLI parses, and
