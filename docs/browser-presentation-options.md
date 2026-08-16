@@ -66,6 +66,21 @@ crit animations) are more work in SVG/CSS than in a raster canvas or a game lib.
 ambition is "clean tactics-game UI," this is cheap. If it's "flashy juice on every hit," it gets
 expensive.
 
+There's a second cost that only shows up once maps get large: **viewport/scrolling.** A hex map
+that doesn't fit on screen needs a camera — render only the visible region, pan/scroll around a
+map that's bigger than the viewport. With one `<polygon>` per tile, every tile is a real DOM node
+that exists (and costs layout/paint/hit-test time, and adds to the accessibility tree) whether
+it's on screen or not, unless you build your own virtualization layer on top of SVG to mount/unmount
+off-screen tiles — at which point you're re-implementing the thing Canvas gives you for free
+(draw only what's inside the current viewport rect; off-screen tiles cost nothing because they're
+never drawn). `viewBox` panning/zooming helps with the *transform* but not with the node-count
+problem underneath it. This is the concrete reason viewport/scrolling pushes against a pure-SVG
+approach for any map bigger than a screenful — see Approach B.
+
+The old p5.js prototype already had to solve this — its README documents four separate ways to
+scroll the map (mouse-to-edge, click-drag, shift+arrow keys, mouse wheel) — so it's a confirmed
+requirement, not a hypothetical.
+
 ## Approach B — Hybrid: Canvas map + DOM chrome
 
 Draw the hex grid and unit sprites on a single `<canvas>` (redraw-on-state-change, not a game
@@ -84,6 +99,11 @@ Slay the Spire–likes) for a reason.
   fallback view would need.
 - Click-to-tile math is a bit of manual work (invert your hex-to-pixel projection), but it's a
   solved, small problem — not a blocker.
+- Viewports/scrolling are the normal case for canvas, not a special one: a camera offset (`(x, y)`
+  pan) plus a clip to the visible tile range, and you only ever draw what's on screen. Off-screen
+  tiles cost nothing — no DOM nodes exist for them to begin with. Panning is just changing the
+  offset and redrawing, the same shape as the old p5.js prototype's mouse-edge/drag/keyboard/wheel
+  scrolling, minus the hand-rolled hit-testing.
 
 **Where it costs you:** two rendering systems to keep in sync (canvas redraw + DOM state), and
 you own animation timing/easing yourself instead of getting it from CSS or a library.
@@ -120,6 +140,7 @@ beyond strictly turn-based (e.g., real-time movement previews, animated AI "thin
 | Fits turn-based, no-game-loop reality | Best | Good | Fighting the grain |
 | Accessibility | Native, ~free | Needs a parallel DOM/ARIA layer (you already have the data via Inspectors) | Hardest to retrofit |
 | Hex-grid layout | SVG polygons — no fight | Canvas draw — no fight | No fight, but inside engine's coordinate system |
+| Large/scrolling maps (viewport) | Needs hand-built virtualization to avoid off-screen DOM cost | Native — only draw what's in the camera rect | Native, engine has camera/viewport built in |
 | Visual ceiling (juice/effects) | Lower | High | Highest |
 | New dependencies | None | None (or a tiny helper) | A game library + its ecosystem |
 | Menus/dialogs/forms | Native HTML | Native HTML | Weak spot of most engines |
@@ -129,17 +150,29 @@ beyond strictly turn-based (e.g., real-time movement previews, animated AI "thin
 
 ## Recommendation
 
-Start with **Approach A (DOM + SVG)**, treating it as a straight port: keep
+*(Superseded by the "new requirements" addendum below, and further reinforced by the viewport
+point above — kept for the reasoning trail.)* ~~Start with Approach A (DOM + SVG), treating it as
+a straight port, and migrate the map to Canvas later if the visual ambition outgrows flat SVG.~~
+
+Go straight to **Approach B (Canvas map + DOM chrome)**: keep
 `CommandContext`/`InteractionPhase`/`CommandProcessor` exactly as they are, write a
 `WebMissionRunner` that maps clicks to the same coordinate/command inputs the CLI parses, and
-replace the *Inspectors'* string output with SVG/DOM renders of the same data. This is the
-smallest step off of what already exists, it gets accessibility close to free, and it doesn't
-introduce any new dependency to evaluate.
+replace the *Inspectors'* string output with a Canvas map render plus DOM/HTML for menus, HUD, and
+dialogs. Three independent requirements all land on B rather than A, so there's no "start simple,
+migrate later" step to take:
 
-If, once it's playable, the visual ambition outgrows flat SVG (you want tile art, animated attack
-effects, more game-like juice), migrate the *map* to Canvas while keeping the DOM chrome —
-Approach B. That migration is additive (swap the map renderer, keep everything else), rather than
-a rewrite, because the brain/UI split was already in place from day one.
+- **Viewport/scrolling.** Any map too big for one screen needs a camera. Canvas draws only what's
+  in the visible rect for free; SVG needs hand-built virtualization to avoid paying DOM/layout/
+  accessibility-tree cost for off-screen tiles. The old p5.js prototype already needed four
+  scrolling input methods, so this isn't hypothetical.
+- **Movement animation.** Multi-step tweens/easing (not just an A-to-B slide) are what
+  Canvas + `requestAnimationFrame` is for; CSS transitions get fought past simple cases.
+- **Large sprites.** Many DOM/SVG `<image>` nodes with big raster art costs more (layout/paint per
+  element) than a canvas blitting into a shared buffer.
+
+Accessibility — Approach A's main advantage — isn't lost, just moved: the CLI's `L`/`W`/`M`
+Inspectors already format exactly the data a parallel `aria-live`/list-view DOM layer needs
+alongside the canvas, so that data model doesn't need to be invented, only re-rendered.
 
 Reach for Approach C only if the project's ambitions shift toward something more real-time or
 visually elaborate than a hex tactics game with discrete turns — at that point the engine's game

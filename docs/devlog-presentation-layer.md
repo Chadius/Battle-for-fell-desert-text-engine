@@ -115,6 +115,14 @@ why:
   already a requirement for itch.io static hosting regardless of A/B/C).
 - **Hex drawing** (squares vs. true hexagons) stops being a tradeoff under B. Canvas draws real
   hexagon polygons at computed centers for free — no `clip-path` fighting, no squares-as-a-hack.
+- **Viewport/scrolling** turned out to be the deciding factor, not just a nice-to-have. If the map
+  is bigger than the screen, something has to own "which part is visible" and "pan around the
+  rest." Canvas does this for free — draw only what's inside the camera rect, and panning is just
+  changing an offset and redrawing. Approach A would need every off-screen tile to still exist as
+  a DOM node (or a hand-built virtualization layer to avoid that), which is exactly the kind of
+  "reinventing the wheel" the p5.js retrospective above was complaining about, just moved to a
+  different wheel. The old p5.js demo already had four separate ways to scroll the map — mouse to
+  the edge, click-drag, shift+arrows, mouse wheel — so this was never a hypothetical need.
 - **Accessibility** is the one place B costs something A wouldn't: the canvas map has no DOM nodes
   for a screen reader to read. The mitigation is that the CLI's Inspectors (`L`, `W`, `M`) already
   format exactly the data a parallel `aria-live` or "list view" fallback would need — that data
