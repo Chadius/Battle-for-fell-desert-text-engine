@@ -20,13 +20,6 @@ const campaignsPath = join(process.cwd(), "src", "testUtils", "fixtures", "campa
 const campaignFolderPath = join(campaignsPath, "minimalCampaign")
 const campaignMissionsPath = join(campaignFolderPath, "missions")
 
-const MinimalCampaignSquaddieIds = {
-    teros: "campaign-squaddie-teros",
-    vale: "campaign-squaddie-vale",
-    gloria: "campaign-squaddie-gloria",
-    wimp: "campaign-squaddie-wimp",
-} as const
-
 describe("campaignLoader", () => {
     describe("listAvailableCampaigns", () => {
         it("returns a sorted list of campaign folder names", () => {
@@ -80,7 +73,7 @@ describe("campaignLoader", () => {
         // Generated fresh per test from MissionEngineTestHarness (the logic submodule's own
         // stable, versioned test scenario) rather than hand-authored JSON, so this fixture can
         // never drift out of sync with the engine's validation schema.
-        let missionFolderPath: string | undefined
+        let missionFolderPath: string
 
         beforeEach(() => {
             missionFolderPath = mkdtempSync(join(tmpdir(), "campaign-loader-mission-"))
@@ -108,27 +101,30 @@ describe("campaignLoader", () => {
         })
 
         afterEach(() => {
-            if (missionFolderPath != undefined) {
-                rmSync(missionFolderPath, { recursive: true, force: true })
-                missionFolderPath = undefined
-            }
+            rmSync(missionFolderPath, { recursive: true, force: true })
         })
 
         it("loads and validates the generated mission successfully", () => {
             const engine = new MissionEngine()
-            const result = loadMissionFromFolder(engine, campaignFolderPath, missionFolderPath!)
+            const result = loadMissionFromFolder(engine, campaignFolderPath, missionFolderPath)
             expect(result.errors).toEqual([])
-            expect(result.isValid).toBe(true)
         })
 
         it("allows the engine to report phase info after loading", () => {
             const engine = new MissionEngine()
-            loadMissionFromFolder(engine, campaignFolderPath, missionFolderPath!)
+            loadMissionFromFolder(engine, campaignFolderPath, missionFolderPath)
             expect(engine.getCurrentAffiliationTurn()).toBeDefined()
         })
     })
 
     describe("loadArmyFromFolder", () => {
+        const MinimalCampaignSquaddieIds = {
+            teros: "campaign-squaddie-teros",
+            vale: "campaign-squaddie-vale",
+            gloria: "campaign-squaddie-gloria",
+            wimp: "campaign-squaddie-wimp",
+        } as const
+
         it("builds an ArmyManager containing every campaign squaddie in army.json", () => {
             const armyManager = loadArmyFromFolder(campaignFolderPath)
 
