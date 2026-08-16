@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest"
 import { join } from "node:path"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import {
     listAvailableCampaigns,
@@ -19,6 +19,10 @@ import { MissionEngineTestHarness } from "../logic/src/testUtils/mission/mission
 const campaignsPath = join(process.cwd(), "src", "testUtils", "fixtures", "campaignLoader", "campaigns")
 const campaignFolderPath = join(campaignsPath, "minimalCampaign")
 const campaignMissionsPath = join(campaignFolderPath, "missions")
+
+// Reads a fixture's own JSON so tests assert against the fixture's actual content instead of a
+// separately hand-typed literal that could silently drift from it.
+const readFixtureJson = (path: string): unknown => JSON.parse(readFileSync(path, "utf-8"))
 
 describe("campaignLoader", () => {
     describe("listAvailableCampaigns", () => {
@@ -40,9 +44,15 @@ describe("campaignLoader", () => {
     })
 
     describe("loadCampaignDisplayName", () => {
+        const expectedDisplayName = (
+            readFixtureJson(join(campaignFolderPath, "campaign.json")) as {
+                displayName: Record<string, string>
+            }
+        ).displayName["en-US"]
+
         it("reads the en-US displayName from campaign.json", () => {
             const displayName = loadCampaignDisplayName(campaignFolderPath, "minimalCampaign")
-            expect(displayName).toEqual("Minimal Campaign")
+            expect(displayName).toEqual(expectedDisplayName)
         })
 
         it("falls back to the folder name when campaign.json does not exist", () => {
@@ -118,24 +128,32 @@ describe("campaignLoader", () => {
     })
 
     describe("loadArmyFromFolder", () => {
-        const MinimalCampaignSquaddieIds = {
-            teros: "campaign-squaddie-teros",
-            vale: "campaign-squaddie-vale",
-            gloria: "campaign-squaddie-gloria",
-            wimp: "campaign-squaddie-wimp",
-        } as const
+        const armyFixtureEntries = readFixtureJson(join(campaignFolderPath, "army.json")) as {
+            id: string
+            outOfBattleSquaddieId: string
+        }[]
+
+        const squaddieIdFor = (outOfBattleSquaddieId: string): string => {
+            const entry = armyFixtureEntries.find(
+                (candidate) => candidate.outOfBattleSquaddieId === outOfBattleSquaddieId
+            )
+            if (entry == undefined) {
+                throw new Error(`[squaddieIdFor] No army fixture entry for "${outOfBattleSquaddieId}"`)
+            }
+            return entry.id
+        }
 
         it("builds an ArmyManager containing every campaign squaddie in army.json", () => {
             const armyManager = loadArmyFromFolder(campaignFolderPath)
 
-            expect(armyManager.has(MinimalCampaignSquaddieIds.teros)).toBe(true)
-            expect(armyManager.has(MinimalCampaignSquaddieIds.vale)).toBe(true)
-            expect(armyManager.has(MinimalCampaignSquaddieIds.gloria)).toBe(true)
+            expect(armyManager.has(squaddieIdFor("teros"))).toBe(true)
+            expect(armyManager.has(squaddieIdFor("vale"))).toBe(true)
+            expect(armyManager.has(squaddieIdFor("gloria"))).toBe(true)
         })
 
         it("marks Wimp as the leader", () => {
             const armyManager = loadArmyFromFolder(campaignFolderPath)
-            const wimp = armyManager.get(MinimalCampaignSquaddieIds.wimp)
+            const wimp = armyManager.get(squaddieIdFor("wimp"))
             expect(wimp.isLeader).toBe(true)
         })
 
@@ -148,19 +166,28 @@ describe("campaignLoader", () => {
     describe("loadMoviesFromFolder", () => {
         const movieMissionFolderPath = join(campaignMissionsPath, "movieMission")
 
+        const campaignMovieId = (
+            readFixtureJson(join(campaignFolderPath, "movies.json")) as { data: { id: string }[] }
+        ).data[0].id
+        const missionMovieId = (
+            readFixtureJson(join(movieMissionFolderPath, "movies.json")) as {
+                data: { id: string }[]
+            }
+        ).data[0].id
+
         it("reads movies defined at the campaign root", () => {
             const movies = loadMoviesFromFolder(campaignFolderPath)
-            expect(movies.map((movie) => movie.id)).toContain("movie-campaign-intro")
+            expect(movies.map((movie) => movie.id)).toContain(campaignMovieId)
         })
 
         it("merges in movies defined in a mission's own movies.json", () => {
             const movies = loadMoviesFromFolder(campaignFolderPath, movieMissionFolderPath)
-            expect(movies.map((movie) => movie.id)).toContain("movie-mission-specific")
+            expect(movies.map((movie) => movie.id)).toContain(missionMovieId)
         })
 
         it("returns only campaign-root movies when no mission folder is given", () => {
             const movies = loadMoviesFromFolder(campaignFolderPath)
-            expect(movies.map((movie) => movie.id)).not.toContain("movie-mission-specific")
+            expect(movies.map((movie) => movie.id)).not.toContain(missionMovieId)
         })
 
         it("returns an empty array when neither movies.json exists", () => {
