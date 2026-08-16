@@ -12,7 +12,7 @@ import {
     loadMoviesFromFolder,
 } from "./campaignLoader.js"
 import { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
-import { MissionEngineTestHarness } from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
+import { writeMissionEngineTestHarnessFolder } from "./testUtils/fixtures/missionFolder.js"
 
 // This fixture is owned by fell-desert-cli (not the external campaignData/campaigns submodule,
 // which is separate content that can be renamed/reshuffled independently of these tests).
@@ -87,27 +87,7 @@ describe("campaignLoader", () => {
 
         beforeEach(() => {
             missionFolderPath = mkdtempSync(join(tmpdir(), "campaign-loader-mission-"))
-            writeFileSync(
-                join(missionFolderPath, "squaddies.json"),
-                JSON.stringify(MissionEngineTestHarness.serializeSquaddies())
-            )
-            writeFileSync(
-                join(missionFolderPath, "attributeSheets.json"),
-                JSON.stringify(MissionEngineTestHarness.serializeAttributeSheets())
-            )
-            writeFileSync(join(missionFolderPath, "items.json"), JSON.stringify([]))
-            writeFileSync(
-                join(missionFolderPath, "maps.json"),
-                JSON.stringify(MissionEngineTestHarness.serializeMaps())
-            )
-            writeFileSync(
-                join(missionFolderPath, "actions.json"),
-                JSON.stringify(MissionEngineTestHarness.serializeActions())
-            )
-            writeFileSync(
-                join(missionFolderPath, "missionState.json"),
-                JSON.stringify(MissionEngineTestHarness.serializeMissionState())
-            )
+            writeMissionEngineTestHarnessFolder(missionFolderPath)
         })
 
         afterEach(() => {
