@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from "vitest"
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest"
 import { join } from "node:path"
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -12,12 +12,20 @@ import {
     loadMoviesFromFolder,
 } from "./campaignLoader.js"
 import { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
-import { TargetPracticeCampaignSquaddieIds } from "./testUtils/deploymentFixture.js"
+import { MissionEngineTestHarness } from "../logic/src/testUtils/mission/missionEngineTestHarness.js"
 
-// campaignData/campaigns lives at the project root (one level above src/).
-const campaignsPath = join(process.cwd(), "campaignData", "campaigns")
-const campaignFolderPath = join(campaignsPath, "test")
+// This fixture is owned by fell-desert-cli (not the external campaignData/campaigns submodule,
+// which is separate content that can be renamed/reshuffled independently of these tests).
+const campaignsPath = join(process.cwd(), "src", "testUtils", "fixtures", "campaignLoader", "campaigns")
+const campaignFolderPath = join(campaignsPath, "minimalCampaign")
 const campaignMissionsPath = join(campaignFolderPath, "missions")
+
+const MinimalCampaignSquaddieIds = {
+    teros: "campaign-squaddie-teros",
+    vale: "campaign-squaddie-vale",
+    gloria: "campaign-squaddie-gloria",
+    wimp: "campaign-squaddie-wimp",
+} as const
 
 describe("campaignLoader", () => {
     describe("listAvailableCampaigns", () => {
@@ -31,22 +39,22 @@ describe("campaignLoader", () => {
             expect(campaigns).toEqual([])
         })
 
-        it("includes the test and templeDefense campaigns", () => {
+        it("includes the minimalCampaign and otherCampaign fixtures", () => {
             const campaigns = listAvailableCampaigns(campaignsPath)
-            expect(campaigns).toContain("test")
-            expect(campaigns).toContain("templeDefense")
+            expect(campaigns).toContain("minimalCampaign")
+            expect(campaigns).toContain("otherCampaign")
         })
     })
 
     describe("loadCampaignDisplayName", () => {
         it("reads the en-US displayName from campaign.json", () => {
-            const displayName = loadCampaignDisplayName(campaignFolderPath, "test")
-            expect(displayName).toEqual("Main Campaign")
+            const displayName = loadCampaignDisplayName(campaignFolderPath, "minimalCampaign")
+            expect(displayName).toEqual("Minimal Campaign")
         })
 
         it("falls back to the folder name when campaign.json does not exist", () => {
-            const displayName = loadCampaignDisplayName("/this/path/does/not/exist", "test")
-            expect(displayName).toEqual("test")
+            const displayName = loadCampaignDisplayName("/this/path/does/not/exist", "minimalCampaign")
+            expect(displayName).toEqual("minimalCampaign")
         })
     })
 
@@ -62,25 +70,60 @@ describe("campaignLoader", () => {
             expect(missions).toEqual([])
         })
 
-        it("includes the testHarness mission", () => {
+        it("includes the movieMission mission", () => {
             const missions = listAvailableMissions(campaignMissionsPath)
-            expect(missions).toContain("testHarness")
+            expect(missions).toContain("movieMission")
         })
     })
 
     describe("loadMissionFromFolder", () => {
-        it("loads and validates the testHarness mission successfully", () => {
+        // Generated fresh per test from MissionEngineTestHarness (the logic submodule's own
+        // stable, versioned test scenario) rather than hand-authored JSON, so this fixture can
+        // never drift out of sync with the engine's validation schema.
+        let missionFolderPath: string | undefined
+
+        beforeEach(() => {
+            missionFolderPath = mkdtempSync(join(tmpdir(), "campaign-loader-mission-"))
+            writeFileSync(
+                join(missionFolderPath, "squaddies.json"),
+                JSON.stringify(MissionEngineTestHarness.serializeSquaddies())
+            )
+            writeFileSync(
+                join(missionFolderPath, "attributeSheets.json"),
+                JSON.stringify(MissionEngineTestHarness.serializeAttributeSheets())
+            )
+            writeFileSync(join(missionFolderPath, "items.json"), JSON.stringify([]))
+            writeFileSync(
+                join(missionFolderPath, "maps.json"),
+                JSON.stringify(MissionEngineTestHarness.serializeMaps())
+            )
+            writeFileSync(
+                join(missionFolderPath, "actions.json"),
+                JSON.stringify(MissionEngineTestHarness.serializeActions())
+            )
+            writeFileSync(
+                join(missionFolderPath, "missionState.json"),
+                JSON.stringify(MissionEngineTestHarness.serializeMissionState())
+            )
+        })
+
+        afterEach(() => {
+            if (missionFolderPath != undefined) {
+                rmSync(missionFolderPath, { recursive: true, force: true })
+                missionFolderPath = undefined
+            }
+        })
+
+        it("loads and validates the generated mission successfully", () => {
             const engine = new MissionEngine()
-            const missionFolderPath = join(campaignMissionsPath, "testHarness")
-            const result = loadMissionFromFolder(engine, campaignFolderPath, missionFolderPath)
+            const result = loadMissionFromFolder(engine, campaignFolderPath, missionFolderPath!)
             expect(result.errors).toEqual([])
             expect(result.isValid).toBe(true)
         })
 
         it("allows the engine to report phase info after loading", () => {
             const engine = new MissionEngine()
-            const missionFolderPath = join(campaignMissionsPath, "testHarness")
-            loadMissionFromFolder(engine, campaignFolderPath, missionFolderPath)
+            loadMissionFromFolder(engine, campaignFolderPath, missionFolderPath!)
             expect(engine.getCurrentAffiliationTurn()).toBeDefined()
         })
     })
@@ -89,14 +132,14 @@ describe("campaignLoader", () => {
         it("builds an ArmyManager containing every campaign squaddie in army.json", () => {
             const armyManager = loadArmyFromFolder(campaignFolderPath)
 
-            expect(armyManager.has(TargetPracticeCampaignSquaddieIds.teros)).toBe(true)
-            expect(armyManager.has(TargetPracticeCampaignSquaddieIds.vale)).toBe(true)
-            expect(armyManager.has(TargetPracticeCampaignSquaddieIds.gloria)).toBe(true)
+            expect(armyManager.has(MinimalCampaignSquaddieIds.teros)).toBe(true)
+            expect(armyManager.has(MinimalCampaignSquaddieIds.vale)).toBe(true)
+            expect(armyManager.has(MinimalCampaignSquaddieIds.gloria)).toBe(true)
         })
 
         it("marks Wimp as the leader", () => {
             const armyManager = loadArmyFromFolder(campaignFolderPath)
-            const wimp = armyManager.get(TargetPracticeCampaignSquaddieIds.wimp)
+            const wimp = armyManager.get(MinimalCampaignSquaddieIds.wimp)
             expect(wimp.isLeader).toBe(true)
         })
 
@@ -107,22 +150,21 @@ describe("campaignLoader", () => {
     })
 
     describe("loadMoviesFromFolder", () => {
-        const templeDefenseFolderPath = join(campaignsPath, "templeDefense")
-        const templeDefenseMissionFolderPath = join(templeDefenseFolderPath, "missions", "0000")
+        const movieMissionFolderPath = join(campaignMissionsPath, "movieMission")
 
         it("reads movies defined at the campaign root", () => {
             const movies = loadMoviesFromFolder(campaignFolderPath)
-            expect(movies.map((movie) => movie.id)).toContain("movie-testHarness-intro")
+            expect(movies.map((movie) => movie.id)).toContain("movie-campaign-intro")
         })
 
         it("merges in movies defined in a mission's own movies.json", () => {
-            const movies = loadMoviesFromFolder(templeDefenseFolderPath, templeDefenseMissionFolderPath)
-            expect(movies.map((movie) => movie.id)).toContain("movie-temple-defense-introduction")
+            const movies = loadMoviesFromFolder(campaignFolderPath, movieMissionFolderPath)
+            expect(movies.map((movie) => movie.id)).toContain("movie-mission-specific")
         })
 
         it("returns only campaign-root movies when no mission folder is given", () => {
-            const movies = loadMoviesFromFolder(templeDefenseFolderPath)
-            expect(movies.map((movie) => movie.id)).not.toContain("movie-temple-defense-introduction")
+            const movies = loadMoviesFromFolder(campaignFolderPath)
+            expect(movies.map((movie) => movie.id)).not.toContain("movie-mission-specific")
         })
 
         it("returns an empty array when neither movies.json exists", () => {

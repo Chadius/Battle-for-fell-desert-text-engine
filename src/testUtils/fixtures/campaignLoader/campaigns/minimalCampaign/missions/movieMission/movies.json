@@ -1,0 +1,9 @@
+{
+    "data": [
+        {
+            "id": "movie-mission-specific",
+            "firstSceneId": "scene1",
+            "scenes": [{ "type": "CONVERSATION", "id": "scene1", "lines": [] }]
+        }
+    ]
+}

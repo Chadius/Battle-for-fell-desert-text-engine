@@ -28,17 +28,6 @@ import {
 import type { MissionObjective } from "../../logic/src/mission/missionObjective.js"
 import type { Movie } from "../../logic/src/movie/movie.js"
 
-// IDs from campaignData/campaigns/test/army.json, used by campaignLoader.test.ts to verify
-// real on-disk JSON parsing -- that folder is local/gitignored campaign content, not a stable
-// fixture, so nothing else should depend on its contents (see LockedDeploymentIds below).
-export const TargetPracticeCampaignSquaddieIds = {
-    teros: "squaddie-99w1ci",
-    vale: "squaddie-0qog1e",
-    gloria: "squaddie-u8r9fn",
-    fracta: "squaddie-fzqwnu",
-    wimp: "squaddie-izmo8d",
-} as const
-
 // A stable, in-memory deployment scenario from the logic submodule's own test suite: Lini
 // (leader) is locked to a LEADER coordinate, Vale is locked to a SPECIFIC_SQUADDIE coordinate,
 // one NONE-type coordinate is left open, and Otto and Zaya are the unplaced eligible squaddies

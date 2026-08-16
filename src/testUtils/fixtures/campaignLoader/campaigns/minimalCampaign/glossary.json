@@ -1,0 +1,16 @@
+{
+    "data": {
+        "terms": [
+            {
+                "termId": "condition.ARMOR",
+                "type": "SQUADDIE_CONDITION_TYPE",
+                "name": { "en-us": { "text": "Armor" } },
+                "definition": {
+                    "en-us": {
+                        "text": "Increases your armor, reducing the chance you will get hit by armor based attacks"
+                    }
+                }
+            }
+        ]
+    }
+}

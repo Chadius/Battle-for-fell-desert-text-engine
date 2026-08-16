@@ -1,0 +1,34 @@
+[
+    {
+        "id": "campaign-squaddie-teros",
+        "outOfBattleAttributeSheetId": "teros-attribute-sheet",
+        "outOfBattleSquaddieId": "teros",
+        "name": "Teros",
+        "isLeader": false,
+        "injuryHistory": []
+    },
+    {
+        "id": "campaign-squaddie-vale",
+        "outOfBattleAttributeSheetId": "vale-attribute-sheet",
+        "outOfBattleSquaddieId": "vale",
+        "name": "Vale",
+        "isLeader": false,
+        "injuryHistory": []
+    },
+    {
+        "id": "campaign-squaddie-gloria",
+        "outOfBattleAttributeSheetId": "gloria-attribute-sheet",
+        "outOfBattleSquaddieId": "gloria",
+        "name": "Gloria",
+        "isLeader": false,
+        "injuryHistory": []
+    },
+    {
+        "id": "campaign-squaddie-wimp",
+        "outOfBattleAttributeSheetId": "wimp-attribute-sheet",
+        "outOfBattleSquaddieId": "wimp",
+        "name": "Wimp",
+        "isLeader": true,
+        "injuryHistory": []
+    }
+]
