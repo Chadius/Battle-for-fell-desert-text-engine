@@ -117,6 +117,7 @@ describe("campaignLoader", () => {
         it("loads and validates the generated mission successfully", () => {
             const engine = new MissionEngine()
             const result = loadMissionFromFolder(engine, campaignFolderPath, missionFolderPath)
+            // isValid is derived from errors.length === 0, so asserting errors is sufficient.
             expect(result.errors).toEqual([])
         })
 
