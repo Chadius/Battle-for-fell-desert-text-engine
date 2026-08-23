@@ -678,8 +678,6 @@ const makeImageResourceCollection = () => {
         description: {
             "en-us": { text: "A wide view of the fell desert battlefield" },
         },
-        filepath: "./battle-overview.png",
-        format: "PNG",
         type: "IMAGE",
     })
     return [
