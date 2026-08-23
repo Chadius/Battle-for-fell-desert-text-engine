@@ -10,9 +10,11 @@ import {
     loadGlossaryFromFolder,
     loadMissionFromFolder,
     loadMoviesFromFolder,
+    loadResourceManifestsFromFolder,
 } from "./campaignLoader.js"
 import { MissionEngine } from "../logic/src/mission/missionEngine/missionEngine.js"
 import { writeMissionEngineTestHarnessFolder } from "./testUtils/fixtures/missionFolder.js"
+import { resolveResourceManifestEntry } from "../logic/src/resource/resourceManifestResolver.js"
 
 // This fixture is owned by fell-desert-cli (not the external campaignData/campaigns submodule,
 // which is separate content that can be renamed/reshuffled independently of these tests).
@@ -174,6 +176,68 @@ describe("campaignLoader", () => {
         it("returns an empty array when neither movies.json exists", () => {
             const movies = loadMoviesFromFolder("/this/path/does/not/exist")
             expect(movies).toEqual([])
+        })
+    })
+
+    describe("loadResourceManifestsFromFolder", () => {
+        const movieMissionFolderPath = join(campaignMissionsPath, "movieMission")
+
+        it("collects resources from every category subfolder at the campaign level", () => {
+            const collections = loadResourceManifestsFromFolder(campaignFolderPath)
+
+            expect(
+                resolveResourceManifestEntry(collections, "shared-portrait")
+                    ?.description["en-us"].text
+            ).toEqual("Campaign-level shared portrait description.")
+            expect(
+                resolveResourceManifestEntry(
+                    collections,
+                    "campaign-only-background"
+                )?.description["en-us"].text
+            ).toEqual("A vast desert opens ahead of you.")
+        })
+
+        it("prefers the mission-level entry when the same id exists at both levels", () => {
+            const collections = loadResourceManifestsFromFolder(
+                campaignFolderPath,
+                movieMissionFolderPath
+            )
+
+            expect(
+                resolveResourceManifestEntry(collections, "shared-portrait")
+                    ?.description["en-us"].text
+            ).toEqual("Mission-level override description.")
+        })
+
+        it("includes mission-only resources when a mission folder is given", () => {
+            const collections = loadResourceManifestsFromFolder(
+                campaignFolderPath,
+                movieMissionFolderPath
+            )
+
+            expect(
+                resolveResourceManifestEntry(collections, "mission-only-image")
+                    ?.description["en-us"].text
+            ).toEqual("Only defined at the mission level.")
+        })
+
+        it("does not fall back to a mission resource when no mission folder is given", () => {
+            const collections = loadResourceManifestsFromFolder(campaignFolderPath)
+
+            expect(
+                resolveResourceManifestEntry(collections, "mission-only-image")
+            ).toBeUndefined()
+        })
+
+        it("resolves to undefined when neither the campaign nor mission folder exists", () => {
+            const collections = loadResourceManifestsFromFolder(
+                "/this/path/does/not/exist",
+                "/this/mission/path/does/not/exist"
+            )
+
+            expect(
+                resolveResourceManifestEntry(collections, "shared-portrait")
+            ).toBeUndefined()
         })
     })
 

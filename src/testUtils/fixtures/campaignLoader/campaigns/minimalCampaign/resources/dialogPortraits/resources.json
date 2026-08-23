@@ -1,0 +1,12 @@
+{
+    "data": [
+        {
+            "id": "shared-portrait",
+            "label": "Shared Portrait",
+            "type": "IMAGE",
+            "description": {
+                "en-us": { "text": "Campaign-level shared portrait description." }
+            }
+        }
+    ]
+}

@@ -1,0 +1,12 @@
+{
+    "data": [
+        {
+            "id": "campaign-only-background",
+            "label": "Desert Background",
+            "type": "IMAGE",
+            "description": {
+                "en-us": { "text": "A vast desert opens ahead of you." }
+            }
+        }
+    ]
+}

@@ -1,0 +1,20 @@
+{
+    "data": [
+        {
+            "id": "shared-portrait",
+            "label": "Shared Portrait (mission override)",
+            "type": "IMAGE",
+            "description": {
+                "en-us": { "text": "Mission-level override description." }
+            }
+        },
+        {
+            "id": "mission-only-image",
+            "label": "Mission Only Image",
+            "type": "IMAGE",
+            "description": {
+                "en-us": { "text": "Only defined at the mission level." }
+            }
+        }
+    ]
+}

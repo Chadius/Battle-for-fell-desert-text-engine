@@ -7,10 +7,20 @@ import { ArmyManager } from "../logic/src/campaign/army/armyManager.js"
 import { ArmyService } from "../logic/src/campaign/army/army.js"
 import { GlossaryManager } from "../logic/src/campaign/glossary/glossaryManager.js"
 import { GlossaryCollectionService } from "../logic/src/campaign/glossary/glossaryCollection.js"
+import {
+    loadResourceManifestFromJSON,
+    type ResourceManifestRawJSON,
+} from "../logic/src/resource/resourceManifestLoader.js"
+import {
+    ResourceManifestCollectionService,
+    type ResourceManifestCollection,
+} from "../logic/src/resource/resourceManifestCollection.js"
 
 export const CAMPAIGN_DATA_FOLDER = "campaignData"
 export const CAMPAIGNS_SUBFOLDER = "campaigns"
 export const MISSIONS_SUBFOLDER = "missions"
+export const RESOURCES_SUBFOLDER = "resources"
+const RESOURCE_MANIFEST_FILENAME = "resources.json"
 
 // Returns sorted list of mission folder names, or empty array if path doesn't exist.
 export const listAvailableMissions = (missionsPath: string): string[] => {
@@ -118,6 +128,71 @@ export const loadArmyFromFolder = (campaignFolderPath: string): ArmyManager => {
 
     return armyManager
 }
+
+// Merges every category subfolder's resources.json (e.g. resources/dialogPortraits/resources.json,
+// resources/backgrounds/resources.json) found under folderPath/resources into one collection.
+// Only the content manifest is read, never resourcesMedia.json (filepath/format) sitting alongside
+// it: this CLI has no renderer to point a filepath at, so the only thing it ever needs from a
+// resource entry is its localized description, used as the text shown in place of an image.
+const loadResourceManifestCollectionFromLevel = (
+    folderPath: string
+): ResourceManifestCollection => {
+    let collection = ResourceManifestCollectionService.new()
+
+    const resourcesPath = join(folderPath, RESOURCES_SUBFOLDER)
+    if (!existsSync(resourcesPath)) return collection
+
+    const categoryFolders = readdirSync(resourcesPath, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+        .sort()
+
+    for (const categoryFolder of categoryFolders) {
+        const resourcesJsonPath = join(
+            resourcesPath,
+            categoryFolder,
+            RESOURCE_MANIFEST_FILENAME
+        )
+        if (!existsSync(resourcesJsonPath)) continue
+
+        const parsed = JSON.parse(readFileSync(resourcesJsonPath, "utf-8"))
+        const rawEntries = (parsed.data ?? []) as {
+            id: string
+            label: string
+            type: string
+            description: Record<string, { text: string }>
+        }[]
+        const rawJSON: ResourceManifestRawJSON = Object.fromEntries(
+            rawEntries.map((entry) => [entry.id, entry])
+        )
+
+        const categoryCollection = loadResourceManifestFromJSON(rawJSON)
+        for (const key of ResourceManifestCollectionService.keys(
+            categoryCollection
+        )) {
+            collection = ResourceManifestCollectionService.add(
+                collection,
+                key,
+                ResourceManifestCollectionService.get(categoryCollection, key)!
+            )
+        }
+    }
+
+    return collection
+}
+
+// Loads resource content manifests from campaignFolderPath/resources, and from
+// missionFolderPath/resources if given, returned mission-first so resolveResourceManifestEntry's
+// first-match-wins scan lets a mission override a campaign-level resource of the same id.
+export const loadResourceManifestsFromFolder = (
+    campaignFolderPath: string,
+    missionFolderPath?: string
+): ResourceManifestCollection[] => [
+    ...(missionFolderPath
+        ? [loadResourceManifestCollectionFromLevel(missionFolderPath)]
+        : []),
+    loadResourceManifestCollectionFromLevel(campaignFolderPath),
+]
 
 // Reads glossary.json from campaignFolderPath and builds a GlossaryManager of term definitions.
 // Returns an empty GlossaryManager if glossary.json does not exist (missions without a glossary
