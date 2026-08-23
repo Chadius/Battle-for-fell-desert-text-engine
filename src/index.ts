@@ -19,6 +19,7 @@ import {
     loadGlossaryFromFolder,
     loadMissionFromFolder,
     loadMoviesFromFolder,
+    loadResourceManifestsFromFolder,
 } from "./campaignLoader.js"
 import { GlossaryManager } from "../logic/src/campaign/glossary/glossaryManager.js"
 import { GlossaryCollectionService } from "../logic/src/campaign/glossary/glossaryCollection.js"
@@ -182,6 +183,9 @@ async function selectAndLoadMission(
     }
     loadMoviesFromFolder(campaignFolderPath, missionFolderPath).forEach((movie) =>
         engine.registerMovie(movie)
+    )
+    engine.registerResourceCollections(
+        loadResourceManifestsFromFolder(campaignFolderPath, missionFolderPath)
     )
 
     return { engine, glossaryManager }

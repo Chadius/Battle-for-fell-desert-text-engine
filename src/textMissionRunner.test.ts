@@ -279,7 +279,7 @@ describe("TextMissionRunner", () => {
             it("flags unrecognised input as invalid and re-shows the scene prompt", () => {
                 const engine = new MissionEngineTestHarness()
                 const runner = new TextMissionRunner(engine)
-                engine.playMovie(makeImageMovie(), [])
+                engine.playMovie(makeImageMovie())
 
                 const result = runner.processInput("0, 0")
 
@@ -291,7 +291,7 @@ describe("TextMissionRunner", () => {
                 it("shows '[Image] No description given' and the caption when no resource entry is present", () => {
                     const engine = new MissionEngineTestHarness()
                     const runner = new TextMissionRunner(engine)
-                    engine.playMovie(makeImageMovie({ caption: "Move your squaddie forward." }), [])
+                    engine.playMovie(makeImageMovie({ caption: "Move your squaddie forward." }))
 
                     const result = runner.processInput("M")
 
@@ -302,9 +302,9 @@ describe("TextMissionRunner", () => {
                 it("shows '[Image]' followed by the description from the resource manifest", () => {
                     const engine = new MissionEngineTestHarness()
                     const runner = new TextMissionRunner(engine)
+                    engine.registerResourceCollections(makeImageResourceCollection())
                     engine.playMovie(
-                        makeImageMovie({ resourceManifestEntryId: BATTLE_OVERVIEW_RESOURCE_ID }),
-                        makeImageResourceCollection()
+                        makeImageMovie({ resourceManifestEntryId: BATTLE_OVERVIEW_RESOURCE_ID })
                     )
 
                     const result = runner.processInput("M")
@@ -315,9 +315,9 @@ describe("TextMissionRunner", () => {
                 it("shows both the description label and the caption when both are provided", () => {
                     const engine = new MissionEngineTestHarness()
                     const runner = new TextMissionRunner(engine)
+                    engine.registerResourceCollections(makeImageResourceCollection())
                     engine.playMovie(
-                        makeImageMovie({ resourceManifestEntryId: BATTLE_OVERVIEW_RESOURCE_ID, caption: "The desert stretches endlessly." }),
-                        makeImageResourceCollection()
+                        makeImageMovie({ resourceManifestEntryId: BATTLE_OVERVIEW_RESOURCE_ID, caption: "The desert stretches endlessly." })
                     )
 
                     const result = runner.processInput("M")
@@ -334,7 +334,7 @@ describe("TextMissionRunner", () => {
                 beforeEach(() => {
                     engine = new MissionEngineTestHarness()
                     runner = new TextMissionRunner(engine)
-                    engine.playMovie(makeConversationMovie(["First line", "Second line"]), [])
+                    engine.playMovie(makeConversationMovie(["First line", "Second line"]))
                 })
 
                 it("advances to the next dialog line when Enter is sent", () => {
@@ -366,8 +366,7 @@ describe("TextMissionRunner", () => {
                     runner.processInput("0, 0")
 
                     engine.playMovie(
-                        makeConversationMovie(["Elapsed: {timeFormat(TIME_ELAPSED, m:ss)}"]),
-                        []
+                        makeConversationMovie(["Elapsed: {timeFormat(TIME_ELAPSED, m:ss)}"])
                     )
                     const result = runner.processInput("M")
 
@@ -386,7 +385,7 @@ describe("TextMissionRunner", () => {
                     engine.markMissionObjectiveAsRewarded(
                         MissionEngineTestHarnessIds.objectives.defeatAllEnemies
                     )
-                    engine.playMovie(makeConversationMovie(["Victory scene"]), [])
+                    engine.playMovie(makeConversationMovie(["Victory scene"]))
                 })
 
                 it("shows the mission summary and quits when the last dialog line is confirmed", () => {
@@ -411,7 +410,7 @@ describe("TextMissionRunner", () => {
                 beforeEach(() => {
                     engine = new MissionEngineTestHarness()
                     runner = new TextMissionRunner(engine)
-                    engine.playMovie(makeDecisionMovie(), [])
+                    engine.playMovie(makeDecisionMovie())
                 })
 
                 it("shows the choice list and a hint footer when an unrecognised option is entered", () => {
