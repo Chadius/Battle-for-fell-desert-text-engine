@@ -16,7 +16,7 @@ import type { ResourceManifestCollection } from "../logic/src/resource/resourceM
 export const CAMPAIGN_DATA_FOLDER = "campaignData"
 export const CAMPAIGNS_SUBFOLDER = "campaigns"
 export const MISSIONS_SUBFOLDER = "missions"
-export const RESOURCES_SUBFOLDER = "resources"
+const RESOURCES_SUBFOLDER = "resources"
 const RESOURCE_MANIFEST_FILENAME = "resources.json"
 
 // Returns sorted list of mission folder names, or empty array if path doesn't exist.
@@ -131,9 +131,9 @@ export const loadArmyFromFolder = (campaignFolderPath: string): ArmyManager => {
 // into a single collection here: resolveResourceManifestEntry's first-match-wins scan over the full
 // ordered array (see loadResourceManifestsFromFolder) is what decides precedence when the same id
 // appears in more than one collection, so that's the only place precedence should be decided.
-// Only the content manifest is read, never resourcesMedia.json (filepath/format) sitting alongside
-// it: this CLI has no renderer to point a filepath at, so the only thing it ever needs from a
-// resource entry is its localized description, used as the text shown in place of an image.
+// Only the content manifest is read, never the parallel media manifest (filepath/format) the logic
+// submodule also defines: this CLI has no renderer to point a filepath at, so the only thing it ever
+// needs from a resource entry is its localized description, used as the text shown in place of an image.
 const loadResourceManifestCollectionsFromLevel = (
     folderPath: string
 ): ResourceManifestCollection[] => {
