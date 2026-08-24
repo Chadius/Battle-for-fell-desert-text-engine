@@ -7,10 +7,7 @@ import { ArmyManager } from "../logic/src/campaign/army/armyManager.js"
 import { ArmyService } from "../logic/src/campaign/army/army.js"
 import { GlossaryManager } from "../logic/src/campaign/glossary/glossaryManager.js"
 import { GlossaryCollectionService } from "../logic/src/campaign/glossary/glossaryCollection.js"
-import {
-    loadResourceManifestFromJSON,
-    type ResourceManifestRawJSON,
-} from "../logic/src/resource/resourceManifestLoader.js"
+import { loadResourceManifestFromJSON } from "../logic/src/resource/resourceManifestLoader.js"
 import type { ResourceManifestCollection } from "../logic/src/resource/resourceManifestCollection.js"
 
 export const CAMPAIGN_DATA_FOLDER = "campaignData"
@@ -152,16 +149,14 @@ const loadResourceManifestCollectionsFromLevel = (
         .filter((resourcesJsonPath) => existsSync(resourcesJsonPath))
         .map((resourcesJsonPath) => {
             const parsed = JSON.parse(readFileSync(resourcesJsonPath, "utf-8"))
-            const rawEntries = (parsed.data ?? []) as {
-                id: string
-                label: string
-                type: string
-                description: Record<string, { text: string }>
-            }[]
-            const rawJSON: ResourceManifestRawJSON = Object.fromEntries(
-                rawEntries.map((entry) => [entry.id, entry])
-            )
-            return loadResourceManifestFromJSON(rawJSON)
+            const { collection, errors } = loadResourceManifestFromJSON(parsed)
+            if (errors.length > 0) {
+                console.warn(
+                    `[campaignLoader] Warnings loading ${resourcesJsonPath}:`
+                )
+                errors.forEach((error) => console.warn(` - ${error}`))
+            }
+            return collection
         })
 }
 
