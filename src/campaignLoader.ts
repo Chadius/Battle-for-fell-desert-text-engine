@@ -11,10 +11,7 @@ import {
     loadResourceManifestFromJSON,
     type ResourceManifestRawJSON,
 } from "../logic/src/resource/resourceManifestLoader.js"
-import {
-    ResourceManifestCollectionService,
-    type ResourceManifestCollection,
-} from "../logic/src/resource/resourceManifestCollection.js"
+import type { ResourceManifestCollection } from "../logic/src/resource/resourceManifestCollection.js"
 
 export const CAMPAIGN_DATA_FOLDER = "campaignData"
 export const CAMPAIGNS_SUBFOLDER = "campaigns"
@@ -129,56 +126,43 @@ export const loadArmyFromFolder = (campaignFolderPath: string): ArmyManager => {
     return armyManager
 }
 
-// Merges every category subfolder's resources.json (e.g. resources/dialogPortraits/resources.json,
-// resources/backgrounds/resources.json) found under folderPath/resources into one collection.
+// Returns one ResourceManifestCollection per category subfolder (e.g. resources/dialogPortraits/resources.json,
+// resources/backgrounds/resources.json) found under folderPath/resources. Categories are not merged
+// into a single collection here: resolveResourceManifestEntry's first-match-wins scan over the full
+// ordered array (see loadResourceManifestsFromFolder) is what decides precedence when the same id
+// appears in more than one collection, so that's the only place precedence should be decided.
 // Only the content manifest is read, never resourcesMedia.json (filepath/format) sitting alongside
 // it: this CLI has no renderer to point a filepath at, so the only thing it ever needs from a
 // resource entry is its localized description, used as the text shown in place of an image.
-const loadResourceManifestCollectionFromLevel = (
+const loadResourceManifestCollectionsFromLevel = (
     folderPath: string
-): ResourceManifestCollection => {
-    let collection = ResourceManifestCollectionService.new()
-
+): ResourceManifestCollection[] => {
     const resourcesPath = join(folderPath, RESOURCES_SUBFOLDER)
-    if (!existsSync(resourcesPath)) return collection
+    if (!existsSync(resourcesPath)) return []
 
     const categoryFolders = readdirSync(resourcesPath, { withFileTypes: true })
         .filter((entry) => entry.isDirectory())
         .map((entry) => entry.name)
         .sort()
 
-    for (const categoryFolder of categoryFolders) {
-        const resourcesJsonPath = join(
-            resourcesPath,
-            categoryFolder,
-            RESOURCE_MANIFEST_FILENAME
+    return categoryFolders
+        .map((categoryFolder) =>
+            join(resourcesPath, categoryFolder, RESOURCE_MANIFEST_FILENAME)
         )
-        if (!existsSync(resourcesJsonPath)) continue
-
-        const parsed = JSON.parse(readFileSync(resourcesJsonPath, "utf-8"))
-        const rawEntries = (parsed.data ?? []) as {
-            id: string
-            label: string
-            type: string
-            description: Record<string, { text: string }>
-        }[]
-        const rawJSON: ResourceManifestRawJSON = Object.fromEntries(
-            rawEntries.map((entry) => [entry.id, entry])
-        )
-
-        const categoryCollection = loadResourceManifestFromJSON(rawJSON)
-        for (const key of ResourceManifestCollectionService.keys(
-            categoryCollection
-        )) {
-            collection = ResourceManifestCollectionService.add(
-                collection,
-                key,
-                ResourceManifestCollectionService.get(categoryCollection, key)!
+        .filter((resourcesJsonPath) => existsSync(resourcesJsonPath))
+        .map((resourcesJsonPath) => {
+            const parsed = JSON.parse(readFileSync(resourcesJsonPath, "utf-8"))
+            const rawEntries = (parsed.data ?? []) as {
+                id: string
+                label: string
+                type: string
+                description: Record<string, { text: string }>
+            }[]
+            const rawJSON: ResourceManifestRawJSON = Object.fromEntries(
+                rawEntries.map((entry) => [entry.id, entry])
             )
-        }
-    }
-
-    return collection
+            return loadResourceManifestFromJSON(rawJSON)
+        })
 }
 
 // Loads resource content manifests from campaignFolderPath/resources, and from
@@ -189,9 +173,9 @@ export const loadResourceManifestsFromFolder = (
     missionFolderPath?: string
 ): ResourceManifestCollection[] => [
     ...(missionFolderPath
-        ? [loadResourceManifestCollectionFromLevel(missionFolderPath)]
+        ? loadResourceManifestCollectionsFromLevel(missionFolderPath)
         : []),
-    loadResourceManifestCollectionFromLevel(campaignFolderPath),
+    ...loadResourceManifestCollectionsFromLevel(campaignFolderPath),
 ]
 
 // Reads glossary.json from campaignFolderPath and builds a GlossaryManager of term definitions.
