@@ -29,6 +29,14 @@ sibling of the folders it describes:
    every mission folder under that campaign's `missions/` directory. E.g.:
    - `campaignData/campaigns/test/missions/manifest.json`
    - `campaignData/campaigns/templeDefense/missions/manifest.json`
+3. **`.../resources/manifest.json`** — one per `resources/` folder, listing every resource
+   *category* subfolder (e.g. `dialogPortraits`, `backgrounds`) directly under it. A `resources/`
+   folder can exist at the campaign level and, independently, at the mission level, so this
+   manifest is needed wherever a `resources/` folder is present:
+   - `campaignData/campaigns/templeDefense/resources/manifest.json` (campaign level; this folder
+     already exists today and contains `dialogPortraits/`)
+   - `campaignData/campaigns/<campaignName>/missions/<missionName>/resources/manifest.json`
+     (mission level, wherever a mission has its own `resources/` folder)
 
 ### Format
 
@@ -49,11 +57,12 @@ even though the folder itself is otherwise complete and correct.
 
 ### Scope check
 
-Confirmed only these two folder types need this treatment — `campaignData/campaigns/` itself and
-each campaign's `missions/` subfolder are the only two places `fell-desert-cli` currently calls
-`readdirSync` on. Nothing else in this data structure (mission contents, resources, army/glossary
-files) is discovered by directory listing; those are all read by exact, already-known filename, so
-they need no manifest and no other change.
+Three folder types need this treatment — `campaignData/campaigns/` itself, each campaign's
+`missions/` subfolder, and any `resources/` folder (at campaign or mission level) — are the only
+places `fell-desert-cli` currently calls `readdirSync` on. (An earlier version of this doc missed
+the `resources/` case.) Nothing else in this data structure (mission contents, army/glossary files,
+the contents of a resource category folder itself) is discovered by directory listing; those are
+all read by exact, already-known filename, so they need no manifest and no other change.
 
 ## Not required
 
