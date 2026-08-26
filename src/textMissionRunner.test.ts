@@ -90,6 +90,28 @@ const makeConversationMovie = (lines: string[]): Movie => ({
     ],
 })
 
+// Single CONVERSATION scene with one dialog line carrying a portrait pointing at resourceManifestEntryId.
+const makeConversationMovieWithPortrait = (text: string, resourceManifestEntryId: string): Movie => ({
+    id: "test-portrait-movie",
+    firstSceneId: "scene-1",
+    scenes: [
+        {
+            type: MovieSceneType.CONVERSATION,
+            data: {
+                id: "scene-1",
+                nextSceneId: undefined,
+                lines: [
+                    {
+                        type: "DIALOG" as const,
+                        text: { "en-us": { text } },
+                        portrait: { resourceManifestEntryId, position: "LEFT" as const },
+                    },
+                ],
+            },
+        },
+    ],
+})
+
 describe("TextMissionRunner", () => {
     describe("getWelcomeText", () => {
         it("returns a string containing the game title", () => {
@@ -324,6 +346,35 @@ describe("TextMissionRunner", () => {
 
                     expect(result.text).toContain("[Image] A wide view of the fell desert battlefield")
                     expect(result.text).toContain("The desert stretches endlessly.")
+                })
+            })
+
+            describe("when the movie scene is a conversation with a portrait", () => {
+                it("shows '[Portrait]' followed by the description from the resource manifest", () => {
+                    const engine = new MissionEngineTestHarness()
+                    const runner = new TextMissionRunner(engine)
+                    engine.registerResourceCollections(makePortraitResourceCollection())
+                    engine.playMovie(
+                        makeConversationMovieWithPortrait("Hello there.", PORTRAIT_RESOURCE_ID)
+                    )
+
+                    const result = runner.processInput("M")
+
+                    expect(result.text).toContain("[Portrait] A grizzled desert scout.")
+                    expect(result.text).toContain("Hello there.")
+                })
+
+                it("omits the portrait line when no matching resource entry is present", () => {
+                    const engine = new MissionEngineTestHarness()
+                    const runner = new TextMissionRunner(engine)
+                    engine.playMovie(
+                        makeConversationMovieWithPortrait("Hello there.", "missing-portrait")
+                    )
+
+                    const result = runner.processInput("M")
+
+                    expect(result.text).not.toContain("[Portrait]")
+                    expect(result.text).toContain("Hello there.")
                 })
             })
 
@@ -683,6 +734,28 @@ const makeImageResourceCollection = () => {
         ResourceManifestCollectionService.add(
             ResourceManifestCollectionService.new(),
             BATTLE_OVERVIEW_RESOURCE_ID,
+            entry
+        ),
+    ]
+}
+
+// Resource ID shared between makeConversationMovieWithPortrait call sites and makePortraitResourceCollection.
+const PORTRAIT_RESOURCE_ID = "npc-scout-portrait"
+
+// Resource collection containing one portrait entry with an en-us description.
+const makePortraitResourceCollection = () => {
+    const entry = ResourceManifestEntryService.new({
+        id: PORTRAIT_RESOURCE_ID,
+        label: "Desert Scout Portrait",
+        description: {
+            "en-us": { text: "A grizzled desert scout." },
+        },
+        type: "IMAGE",
+    })
+    return [
+        ResourceManifestCollectionService.add(
+            ResourceManifestCollectionService.new(),
+            PORTRAIT_RESOURCE_ID,
             entry
         ),
     ]

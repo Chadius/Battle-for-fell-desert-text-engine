@@ -17,6 +17,9 @@ export const sceneDisplayText = (scene: CurrentScene): string => {
     const lines: string[] = []
 
     if (scene.type === MovieSceneType.CONVERSATION) {
+        if (scene.portrait?.description != undefined) {
+            lines.push(`[Portrait] ${scene.portrait.description}`)
+        }
         const speaker = scene.speakerId != undefined ? `${scene.speakerId}: ` : ""
         lines.push(`${speaker}${scene.text}`)
         if (scene.isWaitingForDecision) {
