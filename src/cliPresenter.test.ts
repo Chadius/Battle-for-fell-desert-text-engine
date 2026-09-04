@@ -14,10 +14,7 @@ describe("CliPresenter", () => {
         })
 
         it("lists the in-progress mission objectives", () => {
-            const engine = new MissionEngineTestHarness()
-            expect(engine.getInProgressMissionObjectives().length).toBeGreaterThan(0)
-
-            expect(new CliPresenter(engine).welcomeText([], undefined)).toContain("Objective:")
+            expect(welcomeText()).toContain("Objective:")
         })
 
         it("renders the supplied opening phase events", () => {
@@ -121,7 +118,7 @@ describe("CliPresenter", () => {
             ).toContain("Mission Failed!")
         })
 
-        it("joins the events with newlines and drops the ones that render empty", () => {
+        it("puts each event that has text on its own line and shows nothing for the rest", () => {
             const text = render([
                 { kind: "message", text: "Lini moves to (0, 1)." },
                 {
