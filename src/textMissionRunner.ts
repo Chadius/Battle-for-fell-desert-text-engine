@@ -173,6 +173,15 @@ export class TextMissionRunner {
         return scene != undefined ? [{ kind: "movieScene", scene }] : []
     }
 
+    // Shows the movie that just started playing (e.g. a victory cutscene triggered by an
+    // objective reward mid-turn) instead of whatever the caller was about to do next.
+    private showMovieInProgress(priorEvents: RunnerEvent[]): ProcessInputResult {
+        return {
+            text: this.presenter.render([...priorEvents, ...this.movieSceneEvents()]),
+            shouldQuit: false,
+        }
+    }
+
     // Handles all input while a movie is playing. Returns to normal gameplay once the movie ends.
     private processMovieInput(input: string): ProcessInputResult {
         if (input.trim().toUpperCase() === "Q") return { text: "", shouldQuit: true }
@@ -258,14 +267,21 @@ export class TextMissionRunner {
     private missionEndResultOrContinue(
         priorEvents: RunnerEvent[] = []
     ): ProcessInputResult {
+        // Always settle outstanding objective rewards before checking isDone() —
+        // hasMissionEnded() only recognizes an objective once it's marked rewarded, and
+        // settling it here (rather than assuming some earlier engine call already did it)
+        // is what lets a PLAY_MOVIE reward on that objective actually fire.
+        this.settleObjectiveRewards()
+
+        // Rewarding may have just started a movie (e.g. a victory cutscene tied to the
+        // objective that just completed) — show it instead of ending the mission unseen.
+        if (this.engine.isMoviePlaying()) {
+            return this.showMovieInProgress(priorEvents)
+        }
+
         if (this.engine.isDone()) {
             const rewarded = this.engine.getCompletedAndRewardedMissionObjectives()
             return this.quitWithSummary(priorEvents, rewarded)
-        }
-        const terminalObjectives = this.getPendingTerminalObjectives()
-        if (terminalObjectives.length > 0) {
-            this.rewardTerminalObjectives(terminalObjectives)
-            return this.quitWithSummary(priorEvents, terminalObjectives)
         }
         return { text: this.presenter.render(priorEvents), shouldQuit: false }
     }
@@ -305,21 +321,19 @@ export class TextMissionRunner {
             ...this.advanceToInteractivePhase(),
         ]
 
-        if (this.engine.isMoviePlaying()) {
-            return {
-                text: this.presenter.render([
-                    ...events,
-                    ...this.movieSceneEvents(),
-                ]),
-                shouldQuit: false,
-            }
-        }
-
         return this.missionEndResultOrContinue(events)
     }
 
-    private rewardTerminalObjectives(objectives: MissionObjective[]): void {
-        for (const objective of objectives) {
+    // Grants the reward for every completed-but-unrewarded objective. Goes through
+    // checkAndTriggerObjectiveRewards() first so any PLAY_MOVIE/SET_CHALLENGE_MODIFIER reward
+    // attached to an objective actually fires — markMissionObjectiveAsRewarded() alone only
+    // flips the "rewarded" flag and would silently skip triggering those. What's left after
+    // that (MISSION_ENDS/MISSION_FAILURE-only objectives, which checkAndTriggerObjectiveRewards
+    // doesn't handle since there's nothing to trigger) still needs the flag set explicitly,
+    // since hasMissionEnded() reads it directly.
+    private settleObjectiveRewards(): void {
+        this.engine.checkAndTriggerObjectiveRewards()
+        for (const objective of this.engine.getCompletedButNotRewardedMissionObjectives()) {
             this.engine.markMissionObjectiveAsRewarded(objective.id)
         }
     }
@@ -362,40 +376,20 @@ export class TextMissionRunner {
         }
 
         const phaseEvents = this.advanceToInteractivePhase()
-        this.giveNonTerminalObjectiveRewards()
 
         const events: RunnerEvent[] = [
             { kind: "message", text: result.message },
             ...phaseEvents,
         ]
 
+        // Quitting discards this engine instance entirely (no save/resume exists), so there's
+        // no reason to settle objective rewards on this path — missionEndResultOrContinue()
+        // is the single place that happens, and it's only reached when we're not quitting.
         if (result.action === "quit") {
             return { text: this.presenter.render(events), shouldQuit: true }
         }
 
-        // A movie may have started during action resolution (e.g. victory cutscene).
-        // Show its first frame before handling isDone so the player sees it.
-        if (this.engine.isMoviePlaying()) {
-            return {
-                text: this.presenter.render([
-                    ...events,
-                    ...this.movieSceneEvents(),
-                ]),
-                shouldQuit: false,
-            }
-        }
-
         return this.missionEndResultOrContinue(events)
-    }
-
-    private giveNonTerminalObjectiveRewards(): void {
-        for (const objective of this.engine.getCompletedNonTerminalButNotRewardedObjectives()) {
-            this.engine.markMissionObjectiveAsRewarded(objective.id)
-        }
-    }
-
-    private getPendingTerminalObjectives(): MissionObjective[] {
-        return this.engine.getCompletedTerminalButNotRewardedObjectives()
     }
 
     private missionSummaryEvent(

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest"
 import { TextMissionRunner } from "./textMissionRunner.js"
+import type { ProcessInputResult } from "./textMissionRunner.js"
 import {
     MissionEngineTestHarness,
     MissionEngineTestHarnessIds,
@@ -233,38 +234,25 @@ describe("TextMissionRunner", () => {
     })
 
     describe("mission completion", () => {
-        it("returns shouldQuit true with Mission Complete when all enemies are defeated", () => {
+        let result: ProcessInputResult
+
+        beforeEach(() => {
             const engine = new MissionEngineTestHarness()
             const runner = new TextMissionRunner(engine)
-
-            const slitherDemonId = engine.getSlitherDemonSquaddieId()
-            engine.missionManager!.inBattleSquaddieManager!.dealDamageToSquaddie({
-                ...slitherDemonId,
-                damage: { amount: 100, type: undefined },
-            })
+            engine.defeatSlitherDemon()
 
             runner.processInput("0, 0")
-            const result = runner.processInput("AE")
+            result = runner.processInput("AE")
+        })
 
+        it("returns shouldQuit true with Mission Complete when all enemies are defeated", () => {
             expect(result.shouldQuit).toBe(true)
             expect(result.text).toContain("Mission Complete!")
         })
 
         it("includes turn number and survivor name in the mission summary", () => {
-            const engine = new MissionEngineTestHarness()
-            const runner = new TextMissionRunner(engine)
-
-            const slitherDemonId = engine.getSlitherDemonSquaddieId()
-            engine.missionManager!.inBattleSquaddieManager!.dealDamageToSquaddie({
-                ...slitherDemonId,
-                damage: { amount: 100, type: undefined },
-            })
-
-            runner.processInput("0, 0")
-            const result = runner.processInput("AE")
-
-            expect(result.text).toContain("turn")
-            expect(result.text).toContain("Lini")
+            expect(result.text).toContain("Completed on turn 0.")
+            expect(result.text).toContain("Survivors: Lini")
         })
     })
 
@@ -572,18 +560,7 @@ describe("TextMissionRunner", () => {
             // sees engine state change except through processInput, so that's the only
             // realistic way to exercise the clock pausing for dialogue.
             const engine = new MissionEngineTestHarness()
-            engine.registerMovie(makeConversationMovie(["Victory scene"]))
-            engine.addObjective(
-                MissionObjectiveService.new({
-                    id: "play-victory-movie",
-                    rewards: [MissionObjectiveRewardService.newPlayMovieReward("test-movie")],
-                    criteria: [
-                        MissionObjectiveCriteriaService.newAllSquaddiesDefeatedCriteria({
-                            affiliations: [SquaddieAffiliation.ENEMY],
-                        }),
-                    ],
-                })
-            )
+            registerVictoryMovieObjective(engine, "Victory scene")
             const clock = makeClock()
             const runner = new TextMissionRunner(engine, clock.now)
 
@@ -761,13 +738,12 @@ const makePortraitResourceCollection = () => {
     ]
 }
 
-// Registers a PLAY_MOVIE objective tied to defeating all enemies and returns the configured engine and runner.
-const makeRunnerWithVictoryMovieObjective = (
+// Registers a PLAY_MOVIE objective tied to defeating all enemies onto an existing engine.
+const registerVictoryMovieObjective = (
+    engine: MissionEngineTestHarness,
     dialogLine: string
-): { runner: TextMissionRunner; engine: MissionEngineTestHarness } => {
-    const movie = makeConversationMovie([dialogLine])
-    const engine = new MissionEngineTestHarness()
-    engine.registerMovie(movie)
+): void => {
+    engine.registerMovie(makeConversationMovie([dialogLine]))
     engine.addObjective(
         MissionObjectiveService.new({
             id: "play-victory-movie",
@@ -779,6 +755,14 @@ const makeRunnerWithVictoryMovieObjective = (
             ],
         })
     )
+}
+
+// Registers a PLAY_MOVIE objective tied to defeating all enemies and returns the configured engine and runner.
+const makeRunnerWithVictoryMovieObjective = (
+    dialogLine: string
+): { runner: TextMissionRunner; engine: MissionEngineTestHarness } => {
+    const engine = new MissionEngineTestHarness()
+    registerVictoryMovieObjective(engine, dialogLine)
     return { runner: new TextMissionRunner(engine), engine }
 }
 
