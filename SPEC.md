@@ -21,15 +21,44 @@ movies/cutscenes (`movieCollectionLoader.ts`, `movieSceneInspector.ts`) that pla
 
 ```
 index.ts
-  └─ TextMissionRunner         (CLI loop, phase advancement)
-       └─ CommandProcessor     (input routing, context management)
-            └─ Inspectors      (read-only data formatters)
-            └─ MissionEngine   (game logic facade — in logic submodule)
-                 └─ MissionManager / Managers
+  └─ TextMissionRunner         (mission lifecycle: input routing, phase advancement, AI turns)
+       ├─ CliPresenter         (all display-text rendering; CLI-specific)
+       ├─ CommandProcessor     (input routing, context management)
+       │    └─ Inspectors      (read-only data formatters)
+       └─ MissionEngine        (game logic facade — in logic submodule)
+            └─ MissionManager / Managers
 ```
+
+### Runner / presenter split
+
+`TextMissionRunner` is renderer-agnostic: it drives the mission (parses input, advances phases,
+runs enemy AI, applies objective rewards, tracks the decision clock) and, as it goes, produces a
+list of `RunnerEvent` values describing what the player should be told. It never formats display
+text itself.
+
+`CliPresenter` (`cliPresenter.ts`) owns every piece of CLI text. It holds only a reference to the
+`MissionEngine`; anything runner-owned (opening phase events, the active overlay map, the current
+movie scene) is passed in per call. Its surface:
+
+- `welcomeText(initialPhaseEvents, currentScene)` — the opening screen (title, map name,
+  deployment status or objectives, opening announcements).
+- `mapText(overlayMap)` — the left-panel map: the overlay map when one is active, otherwise the
+  freshly rendered grid with turn info and objectives.
+- `render(events)` — turns a `RunnerEvent[]` into display text (each event to a line or block,
+  empties dropped, joined by newlines).
+
+This keeps a future browser renderer a matter of swapping `CliPresenter` for a
+`RunnerEvent`-consuming equivalent, without touching mission logic.
 
 ### Key Types
 
+- `RunnerEvent` (`runnerEvent.ts`) — a discriminated union of things the runner wants shown:
+  `message` (pre-formatted pass-through text from `CommandProcessor` / deployment / enemy AI),
+  `phaseAnnouncement` (phase + turn number; the presenter owns the phase→label map),
+  `conditionExpired` (squaddie name + condition type), `movieScene` (a movie frame to display),
+  `invalidMovieInput` (bad command or bad decision choice while a movie plays), and
+  `missionSummary` (win/loss, turn count, survivor names). `ProcessInputResult.text` is still the
+  rendered string — `render()` runs inside the runner before returning.
 - `CommandContext` — tracks the UI state: which squaddie is selected, what interaction phase
   the player is in, which action is pending.
 - `InteractionPhase` — `BROWSING`, `SELECTING_ACTION`, `SELECTING_TARGET`, `CONFIRMING_ACTION`,
@@ -72,9 +101,11 @@ The `MissionEngine` class (logic submodule) exposes these operations used by the
 
 ### Phase management
 - On construction and after each command, `advanceToInteractivePhase()` is called.
-- It calls `transitionToNextPhase()` repeatedly, collecting announcement strings, until the engine
-  lands on an interactive phase (`PLAYER_TURN`, `ALLY_TURN`, `ENEMY_TURN`, `NONE_AFFILIATION_TURN`)
-  or the phase stops changing.
+- It calls `transitionToNextPhase()` repeatedly, collecting `RunnerEvent`s (phase announcements,
+  condition-expiry, enemy-AI narration), until the engine lands on an interactive phase
+  (`PLAYER_TURN`, `ALLY_TURN`, `ENEMY_TURN`, `NONE_AFFILIATION_TURN`) or the phase stops changing.
+- The collected events, plus the `CommandProcessor` result and any movie frame, are handed to
+  `CliPresenter.render()` to produce `ProcessInputResult.text`.
 
 ### Commands (via `CommandProcessor`)
 
@@ -247,3 +278,7 @@ Work not covered by the phases above has since landed and is not reflected in th
   dynamic text (e.g. squaddie names) in movie/scene text, and `DecisionClock` tracks how long the
   runner has been waiting on a human decision (`getElapsedDecisionTimeMs()`), pausing during
   movies and AI-driven turns.
+- **Runner / presenter split** (`cliPresenter.ts`, `runnerEvent.ts`) — display-text rendering is
+  factored out of `TextMissionRunner` into `CliPresenter`. The runner emits a `RunnerEvent[]` and
+  the presenter renders it; the public `ProcessInputResult.text` string contract is unchanged. See
+  the *Runner / presenter split* section under Architecture.
