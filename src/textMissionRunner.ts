@@ -11,7 +11,6 @@ import {
 } from "./commandProcessor.js"
 import type { CommandContext } from "./commandProcessor.js"
 import { isFailureObjective } from "./missionObjectiveInspector.js"
-import { conditionTypeName } from "./squaddieDetailInspector.js"
 import {
     MissionAffiliationTurn,
     type TMissionAffiliationTurn,
@@ -20,6 +19,14 @@ import { EnemyAI } from "./enemyAI.js"
 import type { MissionObjective } from "../logic/src/mission/missionObjective.js"
 import { DecisionClock } from "./decisionClock.js"
 import { CliPresenter } from "./cliPresenter.js"
+import { MissionTextSubstitutionToken } from "../logic/src/mission/missionEngine/textSubstitutionTokens.js"
+import type {
+    RunnerEvent,
+    PhaseAnnouncementEvent,
+    ConditionExpiredEvent,
+    MovieSceneEvent,
+    MissionSummaryEvent,
+} from "./runnerEvent.js"
 import {
     processDeploymentCommand,
     initialDeploymentContext,
@@ -37,7 +44,7 @@ export interface ProcessInputResult {
 export class TextMissionRunner {
     private readonly engine: MissionEngine
     private context: CommandContext
-    private readonly initialPhaseMessages: string[]
+    private readonly initialPhaseEvents: RunnerEvent[]
     private lastKnownInteractivePhase: TMissionAffiliationTurn | undefined =
         undefined
     private overlayMap: string | undefined = undefined
@@ -65,7 +72,7 @@ export class TextMissionRunner {
         // start (e.g. an intro cutscene) can fire before the deployment screen is ever shown.
         this.engine.checkAndTriggerObjectiveRewards()
         this.autoFinalizeTrivialDeployment()
-        this.initialPhaseMessages =
+        this.initialPhaseEvents =
             this.isInDeploymentPhase() || this.engine.isMoviePlaying()
                 ? []
                 : this.advanceToInteractivePhase()
@@ -123,10 +130,10 @@ export class TextMissionRunner {
     }
 
     getWelcomeText(): string {
-        return this.presenter.welcomeText(
-            this.initialPhaseMessages,
-            this.getElapsedDecisionTimeMs()
-        )
+        const currentScene = this.engine.isMoviePlaying()
+            ? this.currentScene()
+            : undefined
+        return this.presenter.welcomeText(this.initialPhaseEvents, currentScene)
     }
 
     getMapText(): string {
@@ -145,14 +152,25 @@ export class TextMissionRunner {
         return undefined
     }
 
-    // Transitional: the movie/deployment input paths still thread scene text through their
-    // return values; step 2 converts those to events and these two shims go away.
+    // Reads the live movie status for control-flow decisions (is a scene blocking on a
+    // decision? what are the choices?). Dialogue may reference {TIME_ELAPSED}, which throws
+    // on substitution when the token is missing, so every getMovieStatus() call supplies it.
     private movieStatus(): ReturnType<MissionEngine["getMovieStatus"]> {
-        return this.presenter.movieStatus(this.getElapsedDecisionTimeMs())
+        return this.engine.getMovieStatus({
+            [MissionTextSubstitutionToken.TIME_ELAPSED]: String(
+                this.getElapsedDecisionTimeMs()
+            ),
+        })
     }
 
-    private currentSceneText(): string {
-        return this.presenter.currentSceneText(this.getElapsedDecisionTimeMs())
+    private currentScene(): CurrentScene | undefined {
+        return this.movieStatus()?.currentScene
+    }
+
+    // The current movie frame as a (0- or 1-element) event list, for splicing into a result.
+    private movieSceneEvents(): MovieSceneEvent[] {
+        const scene = this.currentScene()
+        return scene != undefined ? [{ kind: "movieScene", scene }] : []
     }
 
     // Handles all input while a movie is playing. Returns to normal gameplay once the movie ends.
@@ -161,10 +179,15 @@ export class TextMissionRunner {
         const command = this.movieCommandFromInput(input)
 
         // Decision scenes are blocking — recognized movie commands are silently re-displayed
-        const currentScene = this.movieStatus()?.currentScene
+        const currentScene = this.currentScene()
         if (currentScene != undefined && sceneIsWaitingForDecision(currentScene)) {
             if (command != undefined) {
-                return { text: this.currentSceneText(), shouldQuit: false }
+                return {
+                    text: this.presenter.render([
+                        { kind: "movieScene", scene: currentScene },
+                    ]),
+                    shouldQuit: false,
+                }
             }
             return this.movieDecisionResult(currentScene, input.trim())
         }
@@ -176,7 +199,10 @@ export class TextMissionRunner {
 
         if (command == undefined) {
             return {
-                text: `"${input}" is not a valid command while a movie is playing.\n${this.currentSceneText()}`,
+                text: this.presenter.render([
+                    { kind: "invalidMovieInput", input, reason: "command" },
+                    ...this.movieSceneEvents(),
+                ]),
                 shouldQuit: false,
             }
         }
@@ -184,7 +210,10 @@ export class TextMissionRunner {
         this.engine.processMovieCommand(command)
 
         if (this.engine.isMoviePlaying()) {
-            return { text: this.currentSceneText(), shouldQuit: false }
+            return {
+                text: this.presenter.render(this.movieSceneEvents()),
+                shouldQuit: false,
+            }
         }
 
         return this.missionEndResultOrContinue()
@@ -206,7 +235,10 @@ export class TextMissionRunner {
 
         if (decisionId == undefined) {
             return {
-                text: `"${input}" is not a valid choice.\n${this.currentSceneText()}`,
+                text: this.presenter.render([
+                    { kind: "invalidMovieInput", input, reason: "choice" },
+                    { kind: "movieScene", scene: currentScene },
+                ]),
                 shouldQuit: false,
             }
         }
@@ -214,25 +246,41 @@ export class TextMissionRunner {
         this.engine.selectMovieDecision(decisionId)
 
         if (this.engine.isMoviePlaying()) {
-            return { text: this.currentSceneText(), shouldQuit: false }
+            return {
+                text: this.presenter.render(this.movieSceneEvents()),
+                shouldQuit: false,
+            }
         }
 
         return this.missionEndResultOrContinue()
     }
 
-    private missionEndResultOrContinue(priorText = ""): ProcessInputResult {
+    private missionEndResultOrContinue(
+        priorEvents: RunnerEvent[] = []
+    ): ProcessInputResult {
         if (this.engine.isDone()) {
             const rewarded = this.engine.getCompletedAndRewardedMissionObjectives()
-            const text = [priorText, this.missionSummary(rewarded)].filter((s) => s.length > 0).join("\n")
-            return { text, shouldQuit: true }
+            return this.quitWithSummary(priorEvents, rewarded)
         }
         const terminalObjectives = this.getPendingTerminalObjectives()
         if (terminalObjectives.length > 0) {
             this.rewardTerminalObjectives(terminalObjectives)
-            const text = [priorText, this.missionSummary(terminalObjectives)].filter((s) => s.length > 0).join("\n")
-            return { text, shouldQuit: true }
+            return this.quitWithSummary(priorEvents, terminalObjectives)
         }
-        return { text: priorText, shouldQuit: false }
+        return { text: this.presenter.render(priorEvents), shouldQuit: false }
+    }
+
+    private quitWithSummary(
+        priorEvents: RunnerEvent[],
+        terminalObjectives: MissionObjective[]
+    ): ProcessInputResult {
+        return {
+            text: this.presenter.render([
+                ...priorEvents,
+                this.missionSummaryEvent(terminalObjectives),
+            ]),
+            shouldQuit: true,
+        }
     }
 
     // Handles all input during pre-mission campaign squaddie deployment. Once the player
@@ -252,20 +300,22 @@ export class TextMissionRunner {
             return { text: result.message, shouldQuit: false }
         }
 
-        const phaseMessages = this.advanceToInteractivePhase()
-        const allText = [result.message, ...phaseMessages]
-            .filter((s) => s.length > 0)
-            .join("\n")
+        const events: RunnerEvent[] = [
+            { kind: "message", text: result.message },
+            ...this.advanceToInteractivePhase(),
+        ]
 
         if (this.engine.isMoviePlaying()) {
-            const movieText = this.currentSceneText()
             return {
-                text: [allText, movieText].filter((s) => s.length > 0).join("\n"),
+                text: this.presenter.render([
+                    ...events,
+                    ...this.movieSceneEvents(),
+                ]),
                 shouldQuit: false,
             }
         }
 
-        return this.missionEndResultOrContinue(allText)
+        return this.missionEndResultOrContinue(events)
     }
 
     private rewardTerminalObjectives(objectives: MissionObjective[]): void {
@@ -311,28 +361,31 @@ export class TextMissionRunner {
             this.overlayMap = undefined
         }
 
-        const phaseMessages = this.advanceToInteractivePhase()
+        const phaseEvents = this.advanceToInteractivePhase()
         this.giveNonTerminalObjectiveRewards()
 
-        const allText = [result.message, ...phaseMessages]
-            .filter((s) => s.length > 0)
-            .join("\n")
+        const events: RunnerEvent[] = [
+            { kind: "message", text: result.message },
+            ...phaseEvents,
+        ]
 
         if (result.action === "quit") {
-            return { text: allText, shouldQuit: true }
+            return { text: this.presenter.render(events), shouldQuit: true }
         }
 
         // A movie may have started during action resolution (e.g. victory cutscene).
         // Show its first frame before handling isDone so the player sees it.
         if (this.engine.isMoviePlaying()) {
-            const movieText = this.currentSceneText()
             return {
-                text: [allText, movieText].filter((s) => s.length > 0).join("\n"),
+                text: this.presenter.render([
+                    ...events,
+                    ...this.movieSceneEvents(),
+                ]),
                 shouldQuit: false,
             }
         }
 
-        return this.missionEndResultOrContinue(allText)
+        return this.missionEndResultOrContinue(events)
     }
 
     private giveNonTerminalObjectiveRewards(): void {
@@ -345,41 +398,30 @@ export class TextMissionRunner {
         return this.engine.getCompletedTerminalButNotRewardedObjectives()
     }
 
-    private missionSummary(terminalObjectives: MissionObjective[]): string {
-        const lines: string[] = []
-
-        const isFailure = terminalObjectives.some(isFailureObjective)
-        lines.push(
-            isFailure ? "Mission Failed!" : "Mission Complete!",
-            `Completed on turn ${this.engine.getCurrentTurnNumber()}.`
-        )
-
+    private missionSummaryEvent(
+        terminalObjectives: MissionObjective[]
+    ): MissionSummaryEvent {
         const survivors = this.engine
             .getAllSquaddiePositions()
             .map(({ squaddieId }) => this.engine.getSquaddieInfo(squaddieId))
             .filter((info) => info != undefined && info.currentHitPoints > 0)
-        if (survivors.length > 0) {
-            lines.push(`Survivors: ${survivors.map((s) => s.name).join(", ")}`)
-        }
 
-        return lines.join("\n")
+        return {
+            kind: "missionSummary",
+            isFailure: terminalObjectives.some(isFailureObjective),
+            turnNumber: this.engine.getCurrentTurnNumber(),
+            survivorNames: survivors.map((s) => s.name),
+        }
     }
 
-    private announcePhase(phase: TMissionAffiliationTurn): string | undefined {
-        if (phase === MissionAffiliationTurn.TURN_START) {
-            const turnNumber = this.engine.getCurrentTurnNumber()
-            return `Turn ${turnNumber} start`
+    private phaseAnnouncementEvent(
+        phase: TMissionAffiliationTurn
+    ): PhaseAnnouncementEvent {
+        return {
+            kind: "phaseAnnouncement",
+            phase,
+            turnNumber: this.engine.getCurrentTurnNumber(),
         }
-
-        const announcements: Partial<Record<string, string>> = {
-            [MissionAffiliationTurn.PLAYER_TURN_START]: "Player Turn",
-            [MissionAffiliationTurn.ALLY_TURN_START]: "Ally Turn",
-            [MissionAffiliationTurn.ENEMY_TURN_START]: "Enemy Turn",
-            [MissionAffiliationTurn.NONE_AFFILIATION_TURN_START]: "Neutral Turn",
-            [MissionAffiliationTurn.TURN_END]: "End of Turn",
-        }
-
-        return announcements[phase]
     }
 
     private isInteractivePhase(phase: TMissionAffiliationTurn): boolean {
@@ -403,8 +445,8 @@ export class TextMissionRunner {
     // one atomic step (a single phase transition or a single AI action) and then evaluates
     // every stop condition — including the movie-pause check — in this one place, so a
     // PLAY_MOVIE reward can never be advanced past regardless of which step triggered it.
-    private advanceToInteractivePhase(): string[] {
-        const allMessages: string[] = []
+    private advanceToInteractivePhase(): RunnerEvent[] {
+        const allEvents: RunnerEvent[] = []
         let stepCount = 0
 
         while (true) {
@@ -412,7 +454,7 @@ export class TextMissionRunner {
             const isInteractive = this.isInteractivePhase(currentPhase)
 
             if (isInteractive) {
-                allMessages.push(...this.announceRecentTransitions(currentPhase))
+                allEvents.push(...this.announceRecentTransitions(currentPhase))
             }
 
             if (this.shouldPauseAdvancementForMovie()) {
@@ -421,9 +463,9 @@ export class TextMissionRunner {
 
             if (!isInteractive) {
                 // Advance through a single non-interactive bookend phase (START/END)
-                allMessages.push(...this.stepToNextPhase())
+                allEvents.push(...this.stepToNextPhase())
             } else if (!this.isWaitingForHumanInput(currentPhase)) {
-                allMessages.push(...this.processEnemySquaddies())
+                allEvents.push(...this.processEnemySquaddies())
             } else {
                 // A human is expected to act (PLAYER_TURN/ALLY_TURN/NONE_AFFILIATION_TURN, or
                 // an ENEMY_TURN squaddie that's human-controlled via override) — stop.
@@ -438,61 +480,61 @@ export class TextMissionRunner {
             }
         }
 
-        return allMessages
+        return allEvents
     }
 
     // Execute one AI action for the first enemy who can act this phase
-    private processEnemySquaddies(): string[] {
+    private processEnemySquaddies(): RunnerEvent[] {
         const squaddieIds = this.engine.getSquaddiesWhoCanActThisPhase()
         if (squaddieIds.length === 0) return []
-        return EnemyAI.takeTurn(this.engine, squaddieIds[0])
+        return EnemyAI.takeTurn(this.engine, squaddieIds[0]).map((text) => ({
+            kind: "message",
+            text,
+        }))
     }
 
     private announceRecentTransitions(
         currentPhase: TMissionAffiliationTurn
-    ): string[] {
+    ): RunnerEvent[] {
         if (currentPhase === this.lastKnownInteractivePhase) {
             return []
         }
-        const { recentPhaseTransitions } =
-            this.engine.getInMissionSummary()
-        const messages = recentPhaseTransitions
-            .map((phase) => this.announcePhase(phase))
-            .filter((msg): msg is string => msg != undefined)
+        const { recentPhaseTransitions } = this.engine.getInMissionSummary()
+        const events: RunnerEvent[] = recentPhaseTransitions.map((phase) =>
+            this.phaseAnnouncementEvent(phase)
+        )
 
-        messages.push(
-            ...this.formatConditionExpirationMessages(
+        events.push(
+            ...this.conditionExpirationEvents(
                 this.engine.getRecentTransitionResults()
             )
         )
 
         this.lastKnownInteractivePhase = currentPhase
-        return messages
+        return events
     }
 
     // Executes a single phase transition. Announces the departing phase if it's a bookend
     // (e.g. TURN_START/TURN_END) — the arriving phase is announced by announceRecentTransitions()
     // once the loop in advanceToInteractivePhase() re-reads the current phase on its next iteration.
-    private stepToNextPhase(): string[] {
-        const messages: string[] = []
-
-        const departingPhaseAnnouncement = this.announcePhase(
-            this.engine.getCurrentAffiliationTurn()
-        )
-        if (departingPhaseAnnouncement != undefined) {
-            messages.push(departingPhaseAnnouncement)
-        }
+    private stepToNextPhase(): RunnerEvent[] {
+        // Announce the departing phase (only bookends like TURN_START/TURN_END render to
+        // anything) before the transition — the arriving phase is announced by
+        // announceRecentTransitions() on the loop's next iteration.
+        const events: RunnerEvent[] = [
+            this.phaseAnnouncementEvent(this.engine.getCurrentAffiliationTurn()),
+        ]
 
         const transitionResults = this.engine.transitionToNextPhase()
-        messages.push(...this.formatConditionExpirationMessages(transitionResults))
+        events.push(...this.conditionExpirationEvents(transitionResults))
 
-        return messages
+        return events
     }
 
-    private formatConditionExpirationMessages(
+    private conditionExpirationEvents(
         results: SerializedSquaddieActionResult[]
-    ): string[] {
-        const messages: string[] = []
+    ): ConditionExpiredEvent[] {
+        const events: ConditionExpiredEvent[] = []
         for (const result of results) {
             const types = result.dispel?.conditionTypes.types
             if (!types || types.length === 0) continue
@@ -501,11 +543,11 @@ export class TextMissionRunner {
                 inBattleSquaddieId: result.inBattleSquaddieId,
                 outOfBattleSquaddieId: result.outOfBattleSquaddieId,
             })
-            const name = info?.name ?? result.outOfBattleSquaddieId
+            const squaddieName = info?.name ?? result.outOfBattleSquaddieId
             for (const conditionType of types) {
-                messages.push(`${name}'s ${conditionTypeName(conditionType)} expired`)
+                events.push({ kind: "conditionExpired", squaddieName, conditionType })
             }
         }
-        return messages
+        return events
     }
 }
