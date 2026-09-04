@@ -4,25 +4,22 @@ import {
     MovieEngineCommand,
     type TMovieEngineCommand,
 } from "../logic/src/movie/movieEngine.js"
-import { sceneDisplayText, sceneIsWaitingForDecision, type CurrentScene } from "./movieSceneInspector.js"
+import { sceneIsWaitingForDecision, type CurrentScene } from "./movieSceneInspector.js"
 import {
     processCommand,
     InteractionPhase,
 } from "./commandProcessor.js"
 import type { CommandContext } from "./commandProcessor.js"
-import { MissionObjectiveInspector, isFailureObjective } from "./missionObjectiveInspector.js"
+import { isFailureObjective } from "./missionObjectiveInspector.js"
 import { conditionTypeName } from "./squaddieDetailInspector.js"
 import {
     MissionAffiliationTurn,
     type TMissionAffiliationTurn,
 } from "../logic/src/mission/missionTurn.js"
-import { renderMap, type MapRenderInfo } from "./mapRenderer.js"
-import { baseRenderInfo } from "./mapDataGatherer.js"
 import { EnemyAI } from "./enemyAI.js"
 import type { MissionObjective } from "../logic/src/mission/missionObjective.js"
-import { MissionTextSubstitutionToken } from "../logic/src/mission/missionEngine/textSubstitutionTokens.js"
 import { DecisionClock } from "./decisionClock.js"
-import { DeploymentInspector } from "./deploymentInspector.js"
+import { CliPresenter } from "./cliPresenter.js"
 import {
     processDeploymentCommand,
     initialDeploymentContext,
@@ -47,6 +44,7 @@ export class TextMissionRunner {
     private readonly decisionClock: DecisionClock
     private deploymentContext: DeploymentContext = initialDeploymentContext()
     private readonly glossaryManager: GlossaryManager | undefined
+    private readonly presenter: CliPresenter
 
     constructor(
         engine: MissionEngine,
@@ -56,6 +54,7 @@ export class TextMissionRunner {
         this.engine = engine
         this.decisionClock = new DecisionClock(now)
         this.glossaryManager = glossaryManager
+        this.presenter = new CliPresenter(engine)
         this.context = {
             selectedSquaddieId: undefined,
             interactionPhase: InteractionPhase.BROWSING,
@@ -124,70 +123,14 @@ export class TextMissionRunner {
     }
 
     getWelcomeText(): string {
-        const summary = this.engine.getSerializedInMissionSummary()
-
-        // A PLAY_MOVIE reward may fire before deployment begins (e.g. an intro cutscene) —
-        // give it priority over the deployment screen while it's playing.
-        if (this.isInDeploymentPhase() && !this.engine.isMoviePlaying()) {
-            return [
-                "Battle of Fell Desert CLI",
-                "=========================",
-                `Map: ${summary.mapName}`,
-                "Deploy your squad before the mission begins. Enter '?' for deployment commands.",
-                "",
-                DeploymentInspector.formatStatus(this.engine),
-            ].join("\n")
-        }
-
-        const lines: string[] = [
-            "Battle of Fell Desert CLI",
-            "=========================",
-            `Map: ${summary.mapName}`,
-            "Game engine initialized.",
-            "Enter 'Q' to quit, '?' for commands.",
-        ]
-
-        if (this.initialPhaseMessages.length > 0) {
-            lines.push("", ...this.initialPhaseMessages)
-        }
-
-        // A PLAY_MOVIE reward may have fired while advancing through the mission's opening phases.
-        // Hold off on the objectives list until the movie finishes so the two aren't shown together.
-        if (this.engine.isMoviePlaying()) {
-            lines.push("", this.currentSceneText())
-        } else {
-            const objectiveEntries = MissionObjectiveInspector.gatherEntries(this.engine)
-            const objectivesDisplay = MissionObjectiveInspector.formatEntries(objectiveEntries)
-            if (objectivesDisplay.length > 0) {
-                lines.push("", objectivesDisplay)
-            }
-        }
-
-        return lines.join("\n")
+        return this.presenter.welcomeText(
+            this.initialPhaseMessages,
+            this.getElapsedDecisionTimeMs()
+        )
     }
 
-    // Returns the overlay map (with target/movement highlights) when one is active, otherwise the
-    // plain map. Used by the split-pane UI to refresh the left panel after each command.
     getMapText(): string {
-        if (this.isInDeploymentPhase()) {
-            return DeploymentInspector.renderDeploymentMap(this.engine)
-        }
-        if (this.overlayMap != undefined) {
-            return this.overlayMap
-        }
-        const { overview, turnNumber, currentAffiliation, squaddieAffiliations } =
-            baseRenderInfo(this.engine)
-        const summary = this.engine.getSerializedInMissionSummary()
-        const objectiveEntries = MissionObjectiveInspector.gatherEntries(this.engine)
-        const objectivesDisplay = MissionObjectiveInspector.formatEntries(objectiveEntries)
-        const renderInfo: MapRenderInfo = {
-            turnNumber,
-            currentAffiliation,
-            squaddieAffiliations,
-            objectivesDisplay: objectivesDisplay.length > 0 ? objectivesDisplay : undefined,
-            mapName: summary.mapName,
-        }
-        return renderMap(overview, renderInfo)
+        return this.presenter.mapText(this.overlayMap)
     }
 
     // Maps raw player input to a MovieEngineCommand, or undefined (unrecognised).
@@ -202,20 +145,14 @@ export class TextMissionRunner {
         return undefined
     }
 
-    // Dialogue text may reference {TIME_ELAPSED} (e.g. via timeFormat()), which throws on
-    // substitution if the token is missing — so every getMovieStatus() call must supply it.
+    // Transitional: the movie/deployment input paths still thread scene text through their
+    // return values; step 2 converts those to events and these two shims go away.
     private movieStatus(): ReturnType<MissionEngine["getMovieStatus"]> {
-        return this.engine.getMovieStatus({
-            [MissionTextSubstitutionToken.TIME_ELAPSED]: String(
-                this.getElapsedDecisionTimeMs()
-            ),
-        })
+        return this.presenter.movieStatus(this.getElapsedDecisionTimeMs())
     }
 
     private currentSceneText(): string {
-        const status = this.movieStatus()
-        if (status == undefined || status.currentScene == undefined) return ""
-        return sceneDisplayText(status.currentScene)
+        return this.presenter.currentSceneText(this.getElapsedDecisionTimeMs())
     }
 
     // Handles all input while a movie is playing. Returns to normal gameplay once the movie ends.
